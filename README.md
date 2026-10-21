@@ -2,7 +2,7 @@
 
 Aplicativo Linux nativo para monitoramento de câmeras IP, em Rust, GTK 4 e FFmpeg/libav. Interface em português e tema do sistema, com prioridade para Zorin OS 18 x86_64.
 
-A versão **0.2.0** integra cadastro de câmeras, reprodução multistream, Views persistentes, editor visual, foco, zoom digital, áudio exclusivo, descoberta ONVIF, perfis, PTZ e presets. É uma versão inicial: validação em câmeras físicas, drivers VA-API e em outro computador permanece pendente. Consulte a [matriz de validação](docs/FEATURES.md) antes de usar em operação crítica.
+A versão **0.3.0** integra cadastro de câmeras, reprodução multistream, Views persistentes, editor visual, foco, zoom digital, áudio exclusivo, descoberta ONVIF, perfis, PTZ e presets. É uma versão inicial: validação em câmeras físicas, drivers VA-API e em outro computador permanece pendente. Consulte a [matriz de validação](docs/FEATURES.md) antes de usar em operação crítica.
 
 ## Executar
 
@@ -31,9 +31,15 @@ Dados seguem XDG e credenciais ficam no chaveiro Secret Service. Não existe tel
 
 [Documentação](docs/README.md) · [Arquitetura](docs/ARCHITECTURE.md) · [Testes](docs/TESTING.md) · [Progresso](docs/PROGRESS.md)
 
+## Organizar e transferir câmeras
+
+Na **Biblioteca de câmeras**, use a busca e o filtro de pasta. **Nova pasta** cria uma pasta vazia; os ícones ao lado do filtro renomeiam ou excluem a pasta selecionada. Excluir uma pasta mantém as câmeras em **Sem pasta**. Em cada linha: editar, clonar sem senha, mover para pasta e excluir câmera. Clonar abre um rascunho revisável; **Cancelar** não cria a cópia.
+
+Em **Preferências → Biblioteca**, exporte/importe um JSON com câmeras e pastas. Credenciais, perfis/autorização PTZ, senha do aplicativo e Views não são transferidos. Query e fragmento de URLs são omitidos; revise parâmetros de canal após importar. Antes de exportar, revise/edite as URLs para remover segredos que estejam no caminho; essas edições afetam somente o arquivo. Importar mostra uma prévia e adiciona novos cadastros sem substituir os atuais. Exportar exige um nome de arquivo novo.
+
 ## Senha do aplicativo
 
-Em **Preferências → Senha do aplicativo**, informe nova senha e confirmação (mínimo de 8 caracteres). Senha atual é necessária para alterar/remover uma existente. **Bloquear agora** encerra as sessões de vídeo e mostra a tela de desbloqueio; a senha também é exigida na abertura. O bloqueio protege a interface e as listagens CLI; não criptografa o SQLite nem substitui as permissões da conta Linux.
+Em **Preferências → Segurança → Senha do aplicativo**, informe nova senha e confirmação (mínimo de 8 caracteres). Senha atual é necessária para alterar/remover uma existente. **Bloquear agora** encerra as sessões de vídeo e mostra a tela de desbloqueio; a senha também é exigida na abertura. O bloqueio protege a interface e as listagens CLI; não criptografa o SQLite nem substitui as permissões da conta Linux.
 
 ## CLI para scripts
 

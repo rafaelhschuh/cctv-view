@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-10-21
+
+- Biblioteca com busca por nome/endereço/fabricante, filtro por pasta, contador e linhas nativas com nome, pasta/endereço, tipo e ações alinhadas.
+- Pastas persistentes: criar, renomear, mover câmeras e excluir sem apagar câmeras, credenciais ou painéis de Views. Renomear preserva a seleção.
+- Clonar abre um rascunho editável com novo identificador, sem credenciais/perfis/autorização PTZ. Cancelar não grava a cópia.
+- Preferências organizadas em Geral, Biblioteca e Segurança, com áudio, atalhos, diagnóstico e bloqueio em seções próprias.
+- Exportação/importação JSON versionada de câmeras e pastas, sem ler o chaveiro ou transferir senha/referências. Parâmetros e fragmentos de URL omitidos; revisão editável antes de exportar para remover tokens do caminho. Importação validada com prévia, novos IDs e transação aditiva; não altera Views nem senha do aplicativo.
+- Exportação cria arquivo privado sem sobrescrever arquivos existentes. Importação tem limites de tamanho/quantidade, recusa campos desconhecidos e impede cancelamento depois de iniciar a gravação.
+- Verificação: 26 testes padrão, GTK em claro/escuro, fmt/Clippy/release, auditoria local e smoke do AppImage 0.3.0 com checksum.
+
 ## 0.2.0 — 2026-10-21
 
 - Duplo clique alterna foco; X flutuante substitui a faixa de retorno. Tela cheia oculta cabeçalho, sidebar, barras e textos sob os vídeos; remove margens externas vazias da área ocupada pelos painéis. Canvas mantém clipping arredondado antes/depois do primeiro frame.

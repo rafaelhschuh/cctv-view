@@ -28,3 +28,5 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | U04 | Dashboard 12×12 / core,ui | U02 | escala legada, presets sem perda, desenho/move/resize e undo/SQLite | DONE |
 | A02 | Senha do aplicativo / storage,ui | confirmação do usuário | hash/salt, senha errada, alteração/remoção, startup e bloqueio imediato | DONE |
 | C01 | CLI de scripts / app,ui,storage | A02/U03 | help/version/list sem display, abertura View/fullscreen, biblioteca protegida/stdin | DONE |
+| U05 | Biblioteca, pastas e clonagem / core,storage,ui | U01 | filtro/busca, linhas alinhadas, persistência, rascunho sem senha e preservação de Views | DONE |
+| U06 | Preferências e transferência de câmeras / storage,ui | U05/A02 | abas, revisão de URL, JSON sem chaveiro, limites, importação atômica/aditiva e AppImage | DONE |

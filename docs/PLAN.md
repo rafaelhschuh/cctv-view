@@ -29,3 +29,8 @@ Adicionar Sem credenciais em Conexão e validação de certificado configurável
 - Validar modelos, persistência e autenticação, GTK real/escuro/pequeno, CLI headless/erro e AppImage. Somente commits locais.
 
 Entrega 0.2.0 implementada e verificada localmente; evidências em PROGRESS.md, TESTING.md e UI_REVIEW.md. H01/H02 continuam pendentes.
+
+## Biblioteca e preferências (0.3.0)
+Organizar linhas, busca e filtro por pasta. Pastas planas persistentes com movimentação/renomeação/exclusão sem perder câmeras ou Views; clonagem em rascunho sem ler o chaveiro. Preferências em três abas. Transferência JSON com revisão, exclusão de credenciais/query/fragmento, validação completa, novos IDs e importação aditiva em transação. Verificar persistência, casos inválidos, GTK claro/escuro, limites e AppImage; somente commits locais.
+
+Entrega 0.3.0 concluída localmente: 26 testes padrão, GTK em claro/escuro, release e smoke do AppImage passaram; capturas em UI_REVIEW.md e logs em PROGRESS.md. Próximas ações externas ao pedido: homologação H01/H02. Sem push/PR.
