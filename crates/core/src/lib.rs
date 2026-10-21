@@ -372,7 +372,79 @@ impl View {
         *self = next;
         Ok(())
     }
+    pub fn scale_grid(&mut self, columns: u8, rows: u8) -> Result<()> {
+        self.validate()?;
+        ensure!(
+            (1..=16).contains(&columns) && (1..=16).contains(&rows),
+            "Grade inválida."
+        );
+        let mut next = self.clone();
+        for p in &mut next.panels {
+            let edge = |n: u8, old: u8, new: u8| {
+                ((u16::from(n) * u16::from(new) + u16::from(old) / 2) / u16::from(old)) as u8
+            };
+            let right = edge(p.x + p.width, self.columns, columns);
+            let bottom = edge(p.y + p.height, self.rows, rows);
+            p.x = edge(p.x, self.columns, columns);
+            p.y = edge(p.y, self.rows, rows);
+            p.width = right.saturating_sub(p.x).max(1);
+            p.height = bottom.saturating_sub(p.y).max(1);
+        }
+        next.columns = columns;
+        next.rows = rows;
+        next.validate()?;
+        *self = next;
+        Ok(())
+    }
+    pub fn dashboard_layout(&mut self, columns: u8, rows: u8, main: bool) -> Result<()> {
+        ensure!(
+            [1, 2, 3, 4].contains(&columns) && [1, 2, 3, 4].contains(&rows),
+            "Layout inválido."
+        );
+        let slots: Vec<_> = if main {
+            vec![
+                (0, 0, 8, 8),
+                (8, 0, 4, 4),
+                (8, 4, 4, 4),
+                (0, 8, 4, 4),
+                (4, 8, 4, 4),
+                (8, 8, 4, 4),
+            ]
+        } else {
+            (0..rows)
+                .flat_map(|y| {
+                    (0..columns).map(move |x| {
+                        (x * (12 / columns), y * (12 / rows), 12 / columns, 12 / rows)
+                    })
+                })
+                .collect()
+        };
+        ensure!(
+            self.panels.len() <= slots.len(),
+            "O layout não comporta todos os painéis. Nenhuma câmera foi removida."
+        );
+        let mut next = self.clone();
+        next.columns = 12;
+        next.rows = 12;
+        for (p, &(x, y, w, h)) in next.panels.iter_mut().zip(&slots) {
+            p.x = x;
+            p.y = y;
+            p.width = w;
+            p.height = h;
+        }
+        next.validate()?;
+        *self = next;
+        Ok(())
+    }
     pub fn add_camera(&mut self, camera_id: &str, position: Option<(u8, u8)>) -> Result<()> {
+        self.add_camera_sized(camera_id, position, (1, 1))
+    }
+    pub fn add_camera_sized(
+        &mut self,
+        camera_id: &str,
+        position: Option<(u8, u8)>,
+        size: (u8, u8),
+    ) -> Result<()> {
         ensure!(!camera_id.is_empty(), "Selecione uma câmera.");
         let cells: Vec<_> = if let Some(p) = position {
             vec![p]
@@ -387,8 +459,8 @@ impl View {
                 camera_id: camera_id.into(),
                 x,
                 y,
-                width: 1,
-                height: 1,
+                width: size.0,
+                height: size.1,
                 aspect: Aspect::Fit,
             };
             let mut next = self.clone();
@@ -398,7 +470,7 @@ impl View {
                 return Ok(());
             }
         }
-        bail!("Não há espaço livre nesta posição. Aumente a grade ou remova um painel.")
+        bail!("Não há espaço livre nesta posição. Reduza o tamanho, escolha outra posição ou remova um painel.")
     }
     pub fn duplicate(&self) -> Self {
         let mut v = self.clone();
@@ -539,6 +611,36 @@ mod connection_kind_regressions {
         c.snapshot_interval_ms = 0;
         assert!(c.validate().is_err());
         c.snapshot_interval_ms = 1000;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod dashboard_tests {
+    use super::*;
+    #[test]
+    fn rescale_and_dashboard_preserve_identity_and_reject_loss() -> Result<()> {
+        let mut view = View::default();
+        view.add_camera("A", Some((0, 0)))?;
+        view.add_camera("B", Some((1, 0)))?;
+        view.panels[0].aspect = Aspect::Fill;
+        let ids: Vec<_> = view.panels.iter().map(|p| p.id.clone()).collect();
+        view.scale_grid(12, 12)?;
+        assert_eq!((view.panels[0].width, view.panels[0].height), (6, 6));
+        view.dashboard_layout(3, 3, true)?;
+        assert_eq!((view.panels[0].width, view.panels[0].height), (8, 8));
+        assert_eq!(view.panels[0].aspect, Aspect::Fill);
+        assert_eq!(
+            view.panels.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+            ids
+        );
+        let old = view.clone();
+        assert!(view.dashboard_layout(1, 1, false).is_err());
+        assert_eq!(view, old);
+        assert!(view.add_camera_sized("C", Some((0, 0)), (3, 3)).is_err());
+        assert_eq!(view, old);
+        view.add_camera_sized("C", Some((0, 8)), (4, 4))?;
+        view.validate()?;
         Ok(())
     }
 }

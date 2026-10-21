@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "cctv-core"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "cctv-media"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "cctv-onvif"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -186,13 +186,14 @@ dependencies = [
 
 [[package]]
 name = "cctv-storage"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "cc",
  "cctv-core",
  "directories",
  "pkg-config",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",
@@ -200,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "cctv-ui"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "cctv-core",
@@ -215,9 +216,12 @@ dependencies = [
 
 [[package]]
 name = "cctv-view"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
+ "anyhow",
+ "cctv-storage",
  "cctv-ui",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]

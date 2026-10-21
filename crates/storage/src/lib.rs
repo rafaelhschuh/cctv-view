@@ -1,3 +1,4 @@
+mod password;
 use anyhow::{ensure, Context, Result};
 use cctv_core::{Camera, Credentials, Preferences, View, APP_ID};
 use rusqlite::{params, Connection, OptionalExtension};
