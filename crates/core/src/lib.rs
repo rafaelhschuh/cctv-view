@@ -52,6 +52,8 @@ pub struct Capabilities {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Camera {
+    #[serde(default)]
+    pub folder: Option<String>,
     pub id: String,
     pub name: String,
     pub address: String,
@@ -86,6 +88,7 @@ impl Default for Camera {
     fn default() -> Self {
         Self {
             id: id(),
+            folder: None,
             name: String::new(),
             address: String::new(),
             port: 554,

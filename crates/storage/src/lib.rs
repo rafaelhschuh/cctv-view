@@ -1,6 +1,8 @@
+mod library;
 mod password;
 use anyhow::{ensure, Context, Result};
 use cctv_core::{Camera, Credentials, Preferences, View, APP_ID};
+pub use library::{CameraArchive, PortableCamera, MAX_ARCHIVE_BYTES};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     ffi::{c_char, c_int, CStr, CString},
@@ -73,10 +75,19 @@ impl Store {
     }
     pub fn save_camera(&self, c: &Camera) -> Result<()> {
         c.validate()?;
-        self.db.execute(
-            "INSERT INTO cameras VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
-            params![c.id, serde_json::to_string(c)?],
+        // Check folder membership in the same write statement, including across app instances.
+        let changed = self.db.execute(
+            "INSERT INTO cameras(id,data)
+             SELECT ?1,?2 WHERE ?3 IS NULL OR EXISTS (
+                 SELECT 1 FROM settings,json_each(settings.value)
+                 WHERE settings.key='camera_folders' AND json_each.value=?3
+             ) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+            params![c.id, serde_json::to_string(c)?, c.folder],
         )?;
+        ensure!(
+            changed == 1,
+            "A pasta da câmera não existe mais. Mova a câmera para uma pasta existente."
+        );
         Ok(())
     }
     pub fn delete_camera(&mut self, id: &str) -> Result<()> {
@@ -288,6 +299,7 @@ mod connection_compatibility {
         };
         let mut legacy = serde_json::to_value(&c)?;
         for key in [
+            "folder",
             "stream_kind",
             "snapshot_interval_ms",
             "mjpeg_multipart",
@@ -297,6 +309,7 @@ mod connection_compatibility {
             legacy.as_object_mut().expect("camera object").remove(key);
         }
         let old: Camera = serde_json::from_value(legacy)?;
+        assert!(old.folder.is_none());
         assert_eq!(old.stream_kind, StreamKind::Auto);
         assert_eq!(old.snapshot_interval_ms, 1000);
         assert!(old.mjpeg_multipart);

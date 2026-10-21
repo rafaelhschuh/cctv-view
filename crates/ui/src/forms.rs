@@ -51,3 +51,20 @@ pub fn help(parent: &gtk::Box, text: &str) {
     l.add_css_class("dim-label");
     parent.append(&l);
 }
+
+/// Release an entry's keyboard focus before hiding a transient dialog.
+pub(crate) fn close(dialog: &gtk::Dialog) {
+    gtk::prelude::GtkWindowExt::set_focus(dialog, None::<&gtk::Widget>);
+    dialog.close();
+}
+
+/// Empty feedback must not reserve a line or an extra gap above dialog actions.
+pub(crate) fn feedback(parent: &gtk::Box) -> gtk::Label {
+    let label = gtk::Label::new(None);
+    label.set_xalign(0.);
+    label.set_wrap(true);
+    label.set_visible(false);
+    label.connect_label_notify(|label| label.set_visible(!label.text().is_empty()));
+    parent.append(&label);
+    label
+}

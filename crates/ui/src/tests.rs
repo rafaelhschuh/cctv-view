@@ -547,6 +547,7 @@ fn native_crud_editor_and_focus() {
     assert_eq!(active_view(&s).unwrap().name, "Garagem");
     assert_eq!(s.view_list.selected_row().unwrap().index(), 1);
     ptz_activation_is_bounded(&s);
+    library_and_settings(&s);
     auth::configure(&s, &s.window);
     let password_dialog = dialog("Senha do aplicativo");
     let password_fields: Vec<_> = widgets(&password_dialog)
@@ -751,4 +752,260 @@ fn ptz_activation_is_bounded(s: &Shared) {
     settle();
     stop.store(true, std::sync::atomic::Ordering::Release);
     worker.join().unwrap();
+}
+
+fn library_and_settings(s: &Shared) {
+    for (name, kind, url) in [
+        (
+            "Recepção e corredores — um nome longo para verificar alinhamento",
+            cctv_core::StreamKind::Jpeg,
+            "https://camera.test/snapshot.jpg",
+        ),
+        (
+            "Saída dos fundos",
+            cctv_core::StreamKind::Rtsp,
+            "rtsp://camera.test/live",
+        ),
+    ] {
+        let mut c = Camera {
+            name: name.into(),
+            stream_kind: kind,
+            no_credentials: true,
+            ..Default::default()
+        };
+        c.set_stream_url(url).unwrap();
+        Store::open(&s.path).unwrap().save_camera(&c).unwrap();
+    }
+    *s.cameras.borrow_mut() = Store::open(&s.path).unwrap().cameras().unwrap();
+    eprintln!("GTK biblioteca: abrir biblioteca");
+    camera::library(s);
+    let library = dialog("Biblioteca de câmeras");
+    let camera_count = s.cameras.borrow().len();
+    pump_until(|| {
+        widgets(&library)
+            .iter()
+            .filter_map(|w| w.clone().downcast::<gtk::Button>().ok())
+            .any(|b| b.tooltip_text().as_deref() == Some("Editar câmera"))
+    });
+    eprintln!("GTK biblioteca: criar pasta");
+    button_named(&library, "Nova pasta").emit_clicked();
+    let folder = dialog("Nova pasta");
+    settle();
+    entry_named(&folder, "Nome da pasta").set_text("Exteriores");
+    folder.response(gtk::ResponseType::Accept);
+    pump_until(|| {
+        Store::open(&s.path)
+            .unwrap()
+            .folders()
+            .unwrap()
+            .contains(&"Exteriores".into())
+    });
+    settle();
+    eprintln!("GTK biblioteca: mover câmera");
+    button_named(&library, "Mover para pasta").emit_clicked();
+    let moving = dialog("Mover câmera");
+    let choice = widgets(&moving)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::DropDown>().ok())
+        .unwrap();
+    choice.set_selected(1);
+    moving.response(gtk::ResponseType::Accept);
+    pump_until(|| {
+        s.cameras
+            .borrow()
+            .iter()
+            .any(|c| c.folder.as_deref() == Some("Exteriores"))
+    });
+    eprintln!("GTK biblioteca: clonar câmera");
+    button_named(&library, "Clonar câmera sem senha").emit_clicked();
+    pump_until(|| {
+        gtk::Window::list_toplevels().iter().any(|w| {
+            w.clone()
+                .downcast::<gtk::Dialog>()
+                .is_ok_and(|d| d.title().as_deref() == Some("Configurar câmera"))
+        })
+    });
+    let copy_form = dialog("Configurar câmera");
+    assert!(entry_named(&copy_form, "Nome").text().ends_with("(cópia)"));
+    assert!(widgets(&copy_form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+        .all(|e| e.text().is_empty()));
+    copy_form.response(gtk::ResponseType::Cancel);
+    settle();
+    assert_eq!(
+        Store::open(&s.path).unwrap().cameras().unwrap().len(),
+        camera_count
+    );
+    button_named(&library, "Clonar câmera sem senha").emit_clicked();
+    pump_until(|| {
+        gtk::Window::list_toplevels().iter().any(|w| {
+            w.clone()
+                .downcast::<gtk::Dialog>()
+                .is_ok_and(|d| d.title().as_deref() == Some("Configurar câmera"))
+        })
+    });
+    dialog("Configurar câmera").response(gtk::ResponseType::Accept);
+    pump_until(|| s.cameras.borrow().len() == camera_count + 1);
+    let copy = s
+        .cameras
+        .borrow()
+        .iter()
+        .find(|c| c.name.ends_with("(cópia)"))
+        .unwrap()
+        .clone();
+    assert!(copy.secret_ref.is_none());
+    assert!(!copy.ptz_allowed);
+    settle();
+    let rows: Vec<_> = widgets(&library)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::ListBoxRow>().ok())
+        .collect();
+    assert_eq!(rows.len(), camera_count + 1);
+    assert!(rows.iter().all(|r| r.height() == rows[0].height()));
+    capture(&library, "19-camera-library");
+    let search = widgets(&library)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::SearchEntry>().ok())
+        .unwrap();
+    eprintln!("GTK biblioteca: filtrar busca");
+    search.set_text("no-match-camera-xyz");
+    pump_until(|| {
+        widgets(&library)
+            .into_iter()
+            .filter_map(|w| w.downcast::<gtk::Label>().ok())
+            .any(|l| l.text().starts_with("Nenhuma câmera encontrada"))
+    });
+    search.set_text("");
+    settle();
+    let filter = widgets(&library)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::DropDown>().ok())
+        .find(|w| w.tooltip_text().as_deref() == Some("Filtrar por pasta"))
+        .unwrap();
+    filter.set_selected(2);
+    eprintln!("GTK biblioteca: renomear pasta");
+    button_named(&library, "Renomear pasta").emit_clicked();
+    let folder = dialog("Renomear pasta");
+    settle();
+    entry_named(&folder, "Nome da pasta").set_text("Área externa");
+    folder.response(gtk::ResponseType::Accept);
+    pump_until(|| {
+        Store::open(&s.path)
+            .unwrap()
+            .folders()
+            .unwrap()
+            .contains(&"Área externa".into())
+    });
+    settle();
+    assert_eq!(
+        filter
+            .selected_item()
+            .unwrap()
+            .downcast::<gtk::StringObject>()
+            .unwrap()
+            .string(),
+        "Área externa"
+    );
+    assert!(widgets(&library)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Button>().ok())
+        .any(|b| b.tooltip_text().as_deref() == Some("Editar câmera")));
+    capture(&library, "20-camera-folder");
+    library.response(gtk::ResponseType::Close);
+    eprintln!("GTK biblioteca: abrir configurações");
+    settings::open(s);
+    let settings = dialog("Preferências");
+    let notebook = widgets(&settings)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::Notebook>().ok())
+        .unwrap();
+    assert_eq!(notebook.n_pages(), 3);
+    capture(&settings, "21-settings-general");
+    notebook.set_current_page(Some(1));
+    capture(&settings, "22-settings-library");
+    assert!(button_named(&settings, "Exportar câmeras…").is_visible());
+    assert!(button_named(&settings, "Importar câmeras…").is_visible());
+    let export_path = s.path.with_file_name("cameras-export.json");
+    let archive = cctv_storage::CameraArchive::parse(
+        Store::open(&s.path)
+            .unwrap()
+            .export_cameras()
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
+    eprintln!("GTK biblioteca: revisar exportação");
+    transfer::export_review(s, &settings, archive);
+    let review = dialog("Revisar exportação");
+    assert!(!button_named(&review, "Escolher arquivo…").is_sensitive());
+    let reviewed = widgets(&review)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::CheckButton>().ok())
+        .unwrap();
+    reviewed.set_active(true);
+    assert!(button_named(&review, "Escolher arquivo…").is_sensitive());
+    entry_named(&review, "URL do stream para exportar").set_text("http://camera.test/public");
+    assert!(!button_named(&review, "Escolher arquivo…").is_sensitive());
+    reviewed.set_active(true);
+    capture(&review, "25-export-review");
+    review.response(gtk::ResponseType::Cancel);
+    eprintln!("GTK biblioteca: gravar arquivo");
+    transfer::save_file(
+        s,
+        &settings.downgrade(),
+        export_path.clone(),
+        Store::open(&s.path).unwrap().export_cameras().unwrap(),
+    );
+    pump_until(|| export_path.exists());
+    settle();
+    for d in gtk::Window::list_toplevels()
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::MessageDialog>().ok())
+    {
+        d.response(gtk::ResponseType::Close);
+    }
+    let added = s.cameras.borrow().len();
+    eprintln!("GTK biblioteca: ler arquivo");
+    transfer::read_file(s, &settings.downgrade(), export_path);
+    pump_until(|| {
+        gtk::Window::list_toplevels().iter().any(|w| {
+            w.clone()
+                .downcast::<gtk::Dialog>()
+                .is_ok_and(|d| d.title().as_deref() == Some("Revisar importação"))
+        })
+    });
+    let preview = dialog("Revisar importação");
+    capture(&preview, "23-import-preview");
+    preview.response(gtk::ResponseType::Cancel);
+    assert_eq!(s.cameras.borrow().len(), camera_count + 1);
+    let archive = cctv_storage::CameraArchive::parse(
+        Store::open(&s.path)
+            .unwrap()
+            .export_cameras()
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
+    eprintln!("GTK biblioteca: confirmar importação");
+    transfer::preview(s, &settings, archive);
+    let importing = dialog("Revisar importação");
+    importing.response(gtk::ResponseType::Accept);
+    assert!(!importing
+        .widget_for_response(gtk::ResponseType::Cancel)
+        .unwrap()
+        .is_sensitive());
+    importing.response(gtk::ResponseType::Cancel);
+    assert!(importing.is_visible());
+    pump_until(|| s.cameras.borrow().len() == camera_count + 1 + added);
+    for d in gtk::Window::list_toplevels()
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::MessageDialog>().ok())
+    {
+        d.response(gtk::ResponseType::Close);
+    }
+    notebook.set_current_page(Some(2));
+    capture(&settings, "24-settings-security");
+    eprintln!("GTK biblioteca: fechar configurações");
+    settings.response(gtk::ResponseType::Close);
 }

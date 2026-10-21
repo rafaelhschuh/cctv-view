@@ -3,121 +3,16 @@ use cctv_core::{StreamKind, Transport};
 use std::cell::Cell;
 
 pub fn library(s: &Shared) {
-    let d = gtk::Dialog::builder()
-        .transient_for(&s.window)
-        .destroy_with_parent(true)
-        .title("Biblioteca de câmeras")
-        .default_width(700)
-        .default_height(500)
-        .build();
-    d.add_button("Fechar", gtk::ResponseType::Close);
-    let content = d.content_area();
-    margins(&content, 16);
-    let top = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    let add = gtk::Button::with_label("Adicionar câmera");
-    add.add_css_class("suggested-action");
-    let discover = gtk::Button::with_label("Descobrir ONVIF");
-    top.append(&add);
-    top.append(&discover);
-    content.append(&top);
-    let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    let scroll = gtk::ScrolledWindow::builder()
-        .vexpand(true)
-        .child(&list)
-        .build();
-    content.append(&scroll);
-    populate(s, &list);
-    let s2 = s.clone();
-    let list2 = list.clone();
-    add.connect_clicked(move |_| form(&s2, Camera::default(), Some(list2.clone())));
-    let s2 = s.clone();
-    let list2 = list.clone();
-    discover.connect_clicked(move |_| discovery(&s2, list2.clone()));
-    let list_for_close = list.clone();
-    d.connect_close_request(move |_| {
-        while let Some(child) = list_for_close.first_child() {
-            list_for_close.remove(&child);
-        }
-        glib::Propagation::Proceed
-    });
-    d.connect_response(move |d, _| {
-        while let Some(child) = list.first_child() {
-            list.remove(&child);
-        }
-        d.close();
-    });
-    d.present();
+    super::library::open(s);
 }
-fn populate(s: &Shared, list: &gtk::Box) {
-    while let Some(c) = list.first_child() {
-        list.remove(&c);
-    }
-    if s.cameras.borrow().is_empty() {
-        let l = gtk::Label::new(Some(
-            "Nenhuma câmera cadastrada. Adicione pela URL ou descubra dispositivos ONVIF na rede.",
-        ));
-        l.set_wrap(true);
-        margins(&l, 24);
-        list.append(&l);
-    }
-    for c in s.cameras.borrow().iter() {
-        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        margins(&row, 8);
-        let l = gtk::Label::new(Some(&format!(
-            "{}\n{} {} · {}",
-            c.name, c.manufacturer, c.model, c.last_status
-        )));
-        l.set_xalign(0.);
-        l.set_hexpand(true);
-        l.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        row.append(&l);
-        let edit = button("Editar câmera", "document-edit-symbolic");
-        let delete = button("Excluir câmera", "user-trash-symbolic");
-        row.append(&edit);
-        row.append(&delete);
-        list.append(&row);
-        let s2 = s.clone();
-        let c2 = c.clone();
-        let l2 = list.clone();
-        edit.connect_clicked(move |_| form(&s2, c2.clone(), Some(l2.clone())));
-        let s2 = s.clone();
-        let c = c.clone();
-        let l2 = list.clone();
-        delete.connect_clicked(move |_| {
-            let s3 = s2.clone();
-            let c = c.clone();
-            let l = l2.clone();
-            confirm(
-                &s2.window,
-                "Excluir a câmera e removê-la de todas as Views?",
-                move || {
-                    let path = s3.path.clone();
-                    let s4 = s3.clone();
-                    jobs::run(
-                        move || -> Result<_> {
-                            if let Some(secret) = &c.secret_ref {
-                                Vault::delete(secret)?;
-                            }
-                            let mut store = Store::open(path)?;
-                            store.delete_camera(&c.id)?;
-                            Ok((store.cameras()?, store.views()?))
-                        },
-                        move |r| match r {
-                            Ok((c, v)) => {
-                                *s4.cameras.borrow_mut() = c;
-                                *s4.views.borrow_mut() = v;
-                                populate(&s4, &l);
-                                refresh(&s4);
-                            }
-                            Err(e) => message(&s4.window, &e.to_string()),
-                        },
-                    );
-                },
-            );
-        });
-    }
+pub(crate) type LibraryRefresh = Rc<dyn Fn()>;
+pub fn form(s: &Shared, camera: Camera, library: Option<LibraryRefresh>) {
+    form_inner(s, camera, library, false);
 }
-pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
+pub(crate) fn clone_form(s: &Shared, camera: Camera, library: Option<LibraryRefresh>) {
+    form_inner(s, camera, library, true);
+}
+fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>, cloned: bool) {
     let d = gtk::Dialog::builder()
         .transient_for(&s.window)
         .destroy_with_parent(true)
@@ -140,6 +35,9 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     let original = Rc::new(RefCell::new(camera.clone()));
     forms::section(&connection, "Identificação");
     let name = forms::entry(&connection, "Nome", &camera.name);
+    if cloned {
+        forms::help(&connection,"Cópia sem credenciais salvas e sem autorização PTZ. Parâmetros e fragmentos das URLs foram omitidos. Revise se o caminho da URL contém senha ou token antes de salvar.");
+    }
     forms::section(&connection, "Conexão de vídeo");
     let kind =
         gtk::DropDown::from_strings(&["RTSP", "HTTP(S)", "MJPEG", "JPEG — imagem periódica"]);
@@ -750,12 +648,12 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
                             manager.invalidate(&id);
                         }
                         *s2.cameras.borrow_mut() = cameras;
-                        if let Some(list) = library {
-                            populate(&s2, &list);
+                        if let Some(refresh_library) = library {
+                            refresh_library();
                         }
                         refresh(&s2);
                         if let Some(d) = d2.upgrade() {
-                            d.close();
+                            forms::close(&d);
                         }
                     }
                     Err(e) => feedback.set_text(&e.to_string()),
@@ -765,7 +663,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     });
     d.present();
 }
-fn discovery(s: &Shared, library: gtk::Box) {
+pub(crate) fn discovery(s: &Shared, library: LibraryRefresh) {
     let d = gtk::Dialog::builder()
         .transient_for(&s.window)
         .destroy_with_parent(true)
