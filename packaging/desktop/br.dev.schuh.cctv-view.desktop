@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=CCTV View
+GenericName=Monitor de câmeras IP
+Comment=Monitoramento de câmeras com RTSP, ONVIF e layouts personalizáveis
+Exec=cctv-view
+Icon=br.dev.schuh.cctv-view
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=CCTV;ONVIF;RTSP;Câmeras;Monitoramento;
+StartupNotify=true
+StartupWMClass=br.dev.schuh.cctv-view

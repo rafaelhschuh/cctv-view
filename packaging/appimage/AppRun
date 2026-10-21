@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APPDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
+# Drivers, D-Bus/Secret Service, PulseAudio and CA roots come from the user's host session.
+exec "$APPDIR/usr/bin/cctv-view" "$@"

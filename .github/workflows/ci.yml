@@ -1,0 +1,34 @@
+name: Rust and native integration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev libsecret-1-dev libpulse-dev xvfb dbus-x11 ffmpeg openssl gnome-keyring pulseaudio appstream desktop-file-utils
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: xvfb-run -a dbus-run-session -- cargo test -p cctv-ui --locked -- --ignored --test-threads=1
+      - run: scripts/test-protocols.sh
+      - run: scripts/test-native-services.sh
+      - run: cargo build --release --locked
+      - name: Audit dependencies
+        run: cargo install cargo-audit --locked && cargo audit
+      - name: Package AppImage
+        run: scripts/fetch-appimage-tools.sh && scripts/build-appimage.sh
+      - name: AppImage smoke
+        run: CCTV_VIEW_DATA_DIR=$(mktemp -d) CCTV_VIEW_SMOKE_MS=1500 APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a dbus-run-session -- dist/CCTV-View-x86_64.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CCTV-View-x86_64
+          path: |
+            dist/CCTV-View-x86_64.AppImage
+            dist/SHA256SUMS
