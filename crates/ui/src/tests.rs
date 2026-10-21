@@ -53,16 +53,19 @@ fn capture(root: &impl IsA<gtk::Window>, name: &str) {
     let root = root.as_ref();
     std::fs::create_dir_all(&folder).unwrap();
     let paintable = gtk::WidgetPaintable::new(Some(root));
-    let snapshot = gtk::Snapshot::new();
-    paintable.snapshot(&snapshot, root.width() as f64, root.height() as f64);
-    let node = snapshot.to_node().unwrap_or_else(|| {
-        panic!(
-            "Empty snapshot {name}: {}x{}, mapped={}",
-            root.width(),
-            root.height(),
-            root.is_mapped()
-        )
+    // A freshly created WidgetPaintable may have no render node until the next GTK frame.
+    let node = RefCell::new(None);
+    root.queue_draw();
+    pump_until(|| {
+        if node.borrow().is_some() {
+            return true;
+        }
+        let snapshot = gtk::Snapshot::new();
+        paintable.snapshot(&snapshot, root.width() as f64, root.height() as f64);
+        *node.borrow_mut() = snapshot.to_node();
+        node.borrow().is_some()
     });
+    let node = node.into_inner().expect("GTK rendered the window");
     root.renderer()
         .unwrap()
         .render_texture(&node, None)
@@ -116,6 +119,7 @@ fn native_crud_editor_and_focus() {
             }
         }
     });
+    assert!(!s.status.is_visible());
     // The empty state leads directly to the real form. Save an ONVIF address without querying it.
     button_named(&s.window, "Adicionar câmera").emit_clicked();
     let form = dialog("Configurar câmera");
@@ -129,20 +133,67 @@ fn native_crud_editor_and_focus() {
         .into_iter()
         .find_map(|w| w.downcast::<gtk::Notebook>().ok())
         .unwrap();
+    let save_bounds = button_named(&form, "Salvar").compute_bounds(&form).unwrap();
+    let page_bounds = notebook.compute_bounds(&form).unwrap();
+    assert!(
+        save_bounds.y() - page_bounds.y() - page_bounds.height() < 20.,
+        "Empty feedback must not reserve footer space"
+    );
+    let kind = widgets(&form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::DropDown>().ok())
+        .find(|w| w.tooltip_text().as_deref() == Some("Tipo de conexão"))
+        .unwrap();
+    assert_eq!(kind.selected(), 1, "Pasting HTTP chooses HTTP(S)");
+    kind.set_selected(2);
+    notebook.set_current_page(Some(2));
+    capture(&form, "10-mjpeg-options");
+    let multipart = widgets(&form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::DropDown>().ok())
+        .find(|w| w.tooltip_text().as_deref() == Some("Formato MJPEG"))
+        .unwrap();
+    assert!(multipart.is_mapped());
+    kind.set_selected(3);
+    capture(&form, "11-jpeg-options");
+    assert!(!multipart.is_mapped());
+    let interval = widgets(&form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::SpinButton>().ok())
+        .find(|w| w.tooltip_text().as_deref() == Some("Atualização JPEG (ms)"))
+        .unwrap();
+    assert!(interval.is_mapped());
+    interval.set_value(700.);
     notebook.set_current_page(Some(1));
     capture(&form, "04-camera-onvif");
+    entry_named(&form, "Timeout (ms)").set_text("inválido");
+    form.response(gtk::ResponseType::Accept);
+    assert_eq!(notebook.current_page(), Some(2));
+    capture(&form, "13-footer-error");
+    assert!(widgets(&form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Label>().ok())
+        .any(|l| l.text().contains("Timeout deve") && l.is_mapped()));
+    entry_named(&form, "Timeout (ms)").set_text("5000");
     form.response(gtk::ResponseType::Accept);
     pump_until(|| s.cameras.borrow().len() == 1);
-    let camera = s.cameras.borrow()[0].clone();
     let stored = Store::open(&path).unwrap().cameras().unwrap().remove(0);
     assert_eq!(
         stored.capabilities.device_url,
         "http://camera.test/onvif/first"
     );
+    assert_eq!(stored.stream_kind, cctv_core::StreamKind::Jpeg);
+    assert_eq!(stored.snapshot_interval_ms, 700);
+    assert!(!stored.audio_enabled);
     assert_eq!(stored.address, "127.0.0.1");
+    // This fixture serves TS video; return it to HTTP(S) before monitoring.
+    let mut restored = stored.clone();
+    restored.stream_kind = cctv_core::StreamKind::Http;
+    Store::open(&path).unwrap().save_camera(&restored).unwrap();
+    *s.cameras.borrow_mut() = vec![restored];
     assert_eq!(stored.port, listener_port(&stream_url));
     // Changing the endpoint invalidates capabilities and PTZ authorization, and persists independently.
-    let mut configured = camera.clone();
+    let mut configured = s.cameras.borrow()[0].clone();
     configured.capabilities.ptz_url = Some("http://camera.test/ptz".into());
     configured.profile_token = Some("old".into());
     configured.ptz_allowed = true;
@@ -354,6 +405,33 @@ fn native_crud_editor_and_focus() {
     assert_eq!(s.current.borrow().as_deref(), Some(copy_id.as_str()));
     assert!(s.preferences.borrow().initial_view.is_none());
     assert!(Store::open(&path).unwrap().cameras().unwrap().len() == 1);
+    // Uniform rows and left alignment, including badges and a long ellipsized name.
+    for (i, name) in [
+        "Garagem",
+        "Pátio e portões externos — nome muito longo para a lista lateral",
+        "Recepção",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let view = View {
+            name: name.into(),
+            favorite: i == 0,
+            order: i as i32 + 1,
+            ..Default::default()
+        };
+        Store::open(&path).unwrap().save_view(&view).unwrap();
+    }
+    *s.views.borrow_mut() = Store::open(&path).unwrap().views().unwrap();
+    refresh_sidebar(&s);
+    settle();
+    capture(&s.window, "12-view-alignment");
+    let rows: Vec<_> = widgets(&s.view_list)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::ListBoxRow>().ok())
+        .collect();
+    assert_eq!(rows.len(), 4);
+    assert!(rows.iter().all(|r| r.height() == rows[0].height()));
     ptz_activation_is_bounded(&s);
     s.window.close();
     jobs::flush_preferences();
@@ -464,7 +542,8 @@ fn ptz_activation_is_bounded(s: &Shared) {
     entry_named(&form, "Serviço ONVIF").set_text(&endpoint);
     let profiles = widgets(&form)
         .into_iter()
-        .find_map(|w| w.downcast::<gtk::DropDown>().ok())
+        .filter_map(|w| w.downcast::<gtk::DropDown>().ok())
+        .find(|w| w.tooltip_text().as_deref() == Some("Perfil de mídia"))
         .unwrap();
     assert!(!profiles.is_sensitive());
     button_named(&form, "Consultar dispositivo").emit_clicked();

@@ -1,5 +1,5 @@
 use super::*;
-use cctv_core::Transport;
+use cctv_core::{StreamKind, Transport};
 use std::cell::Cell;
 
 pub fn library(s: &Shared) {
@@ -141,9 +141,25 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     forms::section(&connection, "Identificação");
     let name = forms::entry(&connection, "Nome", &camera.name);
     forms::section(&connection, "Conexão de vídeo");
+    let kind =
+        gtk::DropDown::from_strings(&["RTSP", "HTTP(S)", "MJPEG", "JPEG — imagem periódica"]);
+    kind.set_tooltip_text(Some("Tipo de conexão"));
+    kind.set_selected(match camera.stream_kind {
+        StreamKind::Rtsp => 0,
+        StreamKind::Mjpeg => 2,
+        StreamKind::Jpeg => 3,
+        _ if camera.stream_url.starts_with("http") => 1,
+        _ => 0,
+    });
+    forms::row(&connection, "Tipo de conexão", &kind);
     let stream = forms::entry(&connection, "URL do stream", &camera.stream_url);
     stream.set_placeholder_text(Some("rtsp://192.168.1.20:554/live"));
-    forms::help(&connection,"Informe a URL completa do vídeo, incluindo a porta quando necessária. Usuário e senha ficam nos campos abaixo.");
+    let source_help = gtk::Label::new(None);
+    source_help.set_wrap(true);
+    source_help.set_xalign(0.);
+    source_help.set_max_width_chars(60);
+    source_help.add_css_class("dim-label");
+    connection.append(&source_help);
     let destination = gtk::Label::new(None);
     destination.set_xalign(0.);
     destination.set_wrap(true);
@@ -196,6 +212,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
             .map(|p| p.name.as_str())
             .collect::<Vec<_>>(),
     );
+    profiles.set_tooltip_text(Some("Perfil de mídia"));
     forms::row(&onvif, "Perfil de mídia", &profiles);
     profiles.set_sensitive(!camera.profiles.is_empty());
     if let Some(i) = camera
@@ -210,41 +227,100 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     ptz.set_sensitive(camera.capabilities.ptz_url.is_some());
     onvif.append(&ptz);
     forms::help(&onvif,"Ao mudar o endereço ONVIF, consulte novamente o dispositivo antes de habilitar PTZ. O endereço digitado será salvo mesmo sem consulta.");
-    forms::section(&advanced, "Reprodução");
-    let sub = forms::entry(
-        &advanced,
-        "URL do substream",
-        camera.substream_url.as_deref().unwrap_or(""),
-    );
-    forms::help(
-        &advanced,
-        "Opcional: use um stream de menor resolução no mosaico. O foco utiliza o vídeo principal.",
-    );
+    let rtsp_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    forms::section(&rtsp_options, "Opções RTSP");
     let transport = gtk::DropDown::from_strings(&["TCP — recomendado", "UDP"]);
     transport.set_selected(if camera.transport == Transport::Tcp {
         0
     } else {
         1
     });
-    forms::row(&advanced, "Transporte RTSP", &transport);
-    transport.set_sensitive(camera.stream_url.is_empty() || camera.stream_url.starts_with("rtsp:"));
-    let weak = transport.downgrade();
-    stream.connect_changed(move |e| {
-        if let Some(t) = weak.upgrade() {
-            t.set_sensitive(e.text().starts_with("rtsp:"));
-        }
-    });
+    forms::row(&rtsp_options, "Transporte RTSP", &transport);
+    forms::help(
+        &rtsp_options,
+        "TCP prioriza a entrega dos pacotes. UDP pode reduzir atrasos em redes locais estáveis.",
+    );
+    advanced.append(&rtsp_options);
+    let http_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    forms::section(&http_options, "Opções HTTP(S)");
+    forms::help(&http_options, "Vídeo contínuo ou playlist HLS: o formato é detectado automaticamente. Para HTTPS, o certificado é sempre validado.");
+    advanced.append(&http_options);
+    let mjpeg_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    forms::section(&mjpeg_options, "Opções MJPEG");
+    let multipart = gtk::DropDown::from_strings(&[
+        "Multipart — padrão de câmeras IP",
+        "MJPEG contínuo — sem multipart",
+    ]);
+    multipart.set_selected(if camera.mjpeg_multipart { 0 } else { 1 });
+    multipart.set_tooltip_text(Some("Formato MJPEG"));
+    forms::row(&mjpeg_options, "Formato MJPEG", &multipart);
+    forms::help(&mjpeg_options, "Use a URL de vídeo MJPEG por HTTP(S). Não use o endereço de uma imagem JPEG isolada. Este modo não possui áudio.");
+    advanced.append(&mjpeg_options);
+    let jpeg_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    forms::section(&jpeg_options, "Opções JPEG");
+    let interval = gtk::SpinButton::with_range(200., 60000., 100.);
+    interval.set_value(f64::from(camera.snapshot_interval_ms));
+    interval.set_tooltip_text(Some("Atualização JPEG (ms)"));
+    forms::row(&jpeg_options, "Atualização JPEG (ms)", &interval);
+    forms::help(&jpeg_options, "Uma nova imagem é solicitada após esse intervalo. A última imagem permanece visível entre atualizações. Este modo não possui áudio.");
+    advanced.append(&jpeg_options);
+    forms::section(&advanced, "Conexão");
     let timeout = forms::entry(&advanced, "Timeout (ms)", &camera.timeout_ms.to_string());
+    let video_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    forms::section(&video_options, "Reprodução de vídeo");
+    let sub = forms::entry(
+        &video_options,
+        "URL do substream",
+        camera.substream_url.as_deref().unwrap_or(""),
+    );
+    forms::help(
+        &video_options,
+        "Opcional: use um stream de menor resolução no mosaico. O foco utiliza a URL principal.",
+    );
     let audio = gtk::CheckButton::with_label("Permitir áudio no modo foco");
     audio.set_active(camera.audio_enabled);
-    advanced.append(&audio);
+    video_options.append(&audio);
     let hardware = gtk::CheckButton::with_label("Usar aceleração de vídeo quando disponível");
     hardware.set_active(camera.hardware_decode);
-    advanced.append(&hardware);
+    video_options.append(&hardware);
     forms::help(
-        &advanced,
+        &video_options,
         "Se a aceleração não estiver disponível, a reprodução usa o processador automaticamente.",
     );
+    advanced.append(&video_options);
+    let update_kind = {
+        let stream = stream.clone();
+        move |kind: &gtk::DropDown| {
+            let selected = kind.selected();
+            rtsp_options.set_visible(selected == 0);
+            http_options.set_visible(selected == 1);
+            mjpeg_options.set_visible(selected == 2);
+            jpeg_options.set_visible(selected == 3);
+            video_options.set_visible(selected < 2);
+            let (placeholder, help) = match selected {
+                0 => ("rtsp://192.168.1.20:554/live", "Stream RTSP. Configure TCP ou UDP na aba Avançado. Informe usuário e senha nos campos abaixo."),
+                1 => ("https://192.168.1.20/video.m3u8", "Vídeo HTTP(S) ou HLS. O formato é detectado automaticamente; certificados HTTPS são validados."),
+                2 => ("http://192.168.1.20/video.mjpeg", "Vídeo MJPEG por HTTP(S). Escolha multipart ou contínuo na aba Avançado."),
+                _ => ("http://192.168.1.20/snapshot.jpg", "Imagem JPEG por HTTP(S). Ajuste o intervalo de atualização na aba Avançado."),
+            };
+            stream.set_placeholder_text(Some(placeholder));
+            source_help.set_text(help);
+        }
+    };
+    update_kind(&kind);
+    kind.connect_selected_notify(update_kind);
+    let kind2 = kind.downgrade();
+    stream.connect_changed(move |stream| {
+        let Some(kind2) = kind2.upgrade() else { return };
+        let text = stream.text();
+        if text.starts_with("rtsp://") && kind2.selected() != 0 {
+            kind2.set_selected(0);
+        } else if (text.starts_with("http://") || text.starts_with("https://"))
+            && kind2.selected() == 0
+        {
+            kind2.set_selected(1);
+        }
+    });
     forms::section(&advanced, "Credenciais salvas");
     let forget = gtk::CheckButton::with_label("Remover credenciais do chaveiro ao salvar");
     forget.set_sensitive(camera.secret_ref.is_some());
@@ -253,8 +329,11 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     feedback.set_wrap(true);
     feedback.set_max_width_chars(64);
     feedback.set_xalign(0.);
-    feedback.set_size_request(-1, 36);
-    margins(&feedback, 12);
+    feedback.set_margin_start(12);
+    feedback.set_margin_end(12);
+    feedback.set_margin_top(8);
+    feedback.set_visible(false);
+    feedback.connect_label_notify(|label| label.set_visible(!label.text().is_empty()));
     feedback.update_property(&[gtk::accessible::Property::Label(
         "Resultado da configuração",
     )]);
@@ -439,6 +518,9 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
         let hardware = hardware.clone();
         let ptz = ptz.clone();
         let profiles = profiles.clone();
+        let kind = kind.clone();
+        let interval = interval.clone();
+        let multipart = multipart.clone();
         move || -> Result<Camera> {
             let mut c = original.borrow().clone();
             c.name = name.text().trim().to_string();
@@ -457,11 +539,24 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
                 stream.grab_focus();
                 return Err(e);
             }
-            c.substream_url = if sub.text().trim().is_empty() {
+            c.stream_kind = match kind.selected() {
+                0 => StreamKind::Rtsp,
+                1 => StreamKind::Http,
+                2 => StreamKind::Mjpeg,
+                _ => StreamKind::Jpeg,
+            };
+            if let Err(e) = c.validate_source(&c.stream_url) {
+                notebook.set_current_page(Some(0));
+                stream.grab_focus();
+                return Err(e);
+            }
+            c.snapshot_interval_ms = interval.value_as_int() as u32;
+            c.mjpeg_multipart = multipart.selected() == 0;
+            c.substream_url = if kind.selected() >= 2 || sub.text().trim().is_empty() {
                 None
             } else {
                 let value = sub.text().trim().to_string();
-                if let Err(e) = cctv_core::validate_stream(&value) {
+                if let Err(e) = c.validate_source(&value) {
                     notebook.set_current_page(Some(2));
                     sub.grab_focus();
                     return Err(e);
@@ -481,8 +576,8 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
             } else {
                 Transport::Udp
             };
-            c.audio_enabled = audio.is_active();
-            c.hardware_decode = hardware.is_active();
+            c.audio_enabled = kind.selected() < 2 && audio.is_active();
+            c.hardware_decode = kind.selected() < 2 && hardware.is_active();
             c.ptz_allowed = ptz.is_active() && c.capabilities.ptz_url.is_some();
             c.profile_token = c
                 .profiles

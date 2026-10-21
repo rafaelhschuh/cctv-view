@@ -162,10 +162,11 @@ fn build(
     title.add_css_class("heading");
     sidebar.append(&title);
     let view_list = gtk::ListBox::new();
-    view_list.add_css_class("navigation-sidebar");
+    view_list.add_css_class("background");
     view_list.set_selection_mode(gtk::SelectionMode::None);
     let scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
+        .hscrollbar_policy(gtk::PolicyType::Never)
         .child(&view_list)
         .build();
     sidebar.append(&scroll);
@@ -196,11 +197,12 @@ fn build(
     content.append(&grid);
     root.append(&content);
     content.set_vexpand(true);
-    let status = gtk::Label::new(Some("Pronto · duplo clique para foco · Escape para voltar"));
+    let status = gtk::Label::new(None);
     status.set_xalign(0.);
     status.set_wrap(true);
     margins(&status, 8);
-    status.add_css_class("dim-label");
+    status.set_visible(false);
+    status.connect_label_notify(|label| label.set_visible(!label.text().is_empty()));
     root.append(&status);
     window.set_child(Some(&root));
     let selected = prefs
@@ -495,8 +497,12 @@ fn refresh_sidebar(s: &Shared) {
         let row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         let select = gtk::Button::new();
         select.set_hexpand(true);
+        select.set_height_request(60);
+        select.set_valign(gtk::Align::Center);
         select.set_tooltip_text(Some(&v.name));
         let content = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        content.set_valign(gtk::Align::Center);
+        content.set_hexpand(true);
         let name = gtk::Label::new(Some(&v.name));
         name.set_xalign(0.);
         name.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -509,12 +515,16 @@ fn refresh_sidebar(s: &Shared) {
         if s.preferences.borrow().initial_view.as_ref() == Some(&v.id) {
             badges.push("Inicial");
         }
-        if !badges.is_empty() {
-            let label = gtk::Label::new(Some(&badges.join(" · ")));
-            label.set_xalign(0.);
-            label.add_css_class("dim-label");
-            content.append(&label);
-        }
+        // Reserve the same subtitle line so names and menus align with or without badges.
+        let subtitle = if badges.is_empty() {
+            " ".to_string()
+        } else {
+            badges.join(" · ")
+        };
+        let label = gtk::Label::new(Some(&subtitle));
+        label.set_xalign(0.);
+        label.add_css_class("dim-label");
+        content.append(&label);
         select.set_child(Some(&content));
         select.update_property(&[gtk::accessible::Property::Label(&format!(
             "Abrir View {}",
@@ -531,8 +541,16 @@ fn refresh_sidebar(s: &Shared) {
             refresh(&s2);
         });
         row.append(&select);
-        row.append(&views::menu(s, v, index));
-        s.view_list.append(&row);
+        let actions = views::menu(s, v, index);
+        actions.set_valign(gtk::Align::Center);
+        actions.set_size_request(36, 36);
+        row.append(&actions);
+        let item = gtk::ListBoxRow::new();
+        item.set_activatable(false);
+        item.set_selectable(false);
+        item.set_child(Some(&row));
+        item.set_margin_bottom(4);
+        s.view_list.append(&item);
     }
 }
 #[cfg(test)]
