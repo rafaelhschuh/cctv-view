@@ -18,6 +18,19 @@ pub(crate) fn open(s: &Shared) {
     let diagnostics = gtk::Button::with_label("Diagnóstico de sessões e recursos");
     area.append(&diagnostics);
     diagnostics.connect_clicked(move |_| diagnostics::open(&s2));
+    let password = gtk::Button::with_label("Senha do aplicativo…");
+    area.append(&password);
+    let state = s.clone();
+    let parent = d.downgrade();
+    password.connect_clicked(move |_| {
+        if let Some(parent) = parent.upgrade() {
+            auth::configure(&state, &parent);
+        }
+    });
+    let lock = gtk::Button::with_label("Bloquear agora");
+    area.append(&lock);
+    let state = s.clone();
+    lock.connect_clicked(move |_| auth::lock(&state));
     let s = s.clone();
     volume.connect_value_changed(move |v| {
         let value = v.value() / 100.;

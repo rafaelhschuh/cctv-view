@@ -25,13 +25,13 @@ fn dialog(title: &str) -> gtk::Dialog {
         .into_iter()
         .filter_map(|w| w.downcast::<gtk::Dialog>().ok())
         .find(|w| w.title().as_deref() == Some(title))
-        .expect("dialog should be visible")
+        .unwrap_or_else(|| panic!("Dialog not found: {title}"))
 }
 fn button_named(root: &impl IsA<gtk::Widget>, text: &str) -> gtk::Button {
     widgets(root)
         .into_iter()
         .filter_map(|w| w.downcast::<gtk::Button>().ok())
-        .find(|b| b.label().as_deref() == Some(text))
+        .find(|b| b.label().as_deref() == Some(text) || b.tooltip_text().as_deref() == Some(text))
         .unwrap_or_else(|| panic!("Button not found: {text}"))
 }
 fn entry_named(root: &impl IsA<gtk::Widget>, text: &str) -> gtk::Entry {
@@ -276,7 +276,7 @@ fn native_crud_editor_and_focus() {
     assert!(widgets(&d)
         .into_iter()
         .filter_map(|w| w.downcast::<gtk::Button>().ok())
-        .all(|b| b.label().as_deref() != Some("Portaria de teste\n1 × 1")));
+        .all(|b| b.label().as_deref() != Some("Portaria de teste\n6 × 6")));
     button_named(&d, "+").emit_clicked();
     let picker = dialog("Escolher câmera");
     button_named(&picker, "Portaria de teste").emit_clicked();
@@ -292,13 +292,13 @@ fn native_crud_editor_and_focus() {
     assert!(widgets(&d)
         .into_iter()
         .filter_map(|w| w.downcast::<gtk::Button>().ok())
-        .any(|b| b.label().as_deref() == Some("Portaria de teste\n1 × 1")));
+        .any(|b| b.label().as_deref() == Some("Portaria de teste\n4 × 4")));
     button_named(&d, "Desfazer layout").emit_clicked();
     d.response(gtk::ResponseType::Accept);
     pump_until(|| s.views.borrow().len() == 1);
     let v = s.views.borrow()[0].clone();
     assert_eq!(v.panels.len(), 1);
-    assert_eq!((v.columns, v.rows), (2, 2));
+    assert_eq!((v.columns, v.rows), (12, 12));
     assert_eq!(v.name, "Entrada");
     assert_eq!(Store::open(&path).unwrap().views().unwrap()[0], v);
     // Enter, menu activation, a visible Back button and double-click all reach the same focus state.
@@ -325,6 +325,16 @@ fn native_crud_editor_and_focus() {
         ]
     ));
     assert!(s.focus.borrow().is_some());
+    capture(&s.window, "16-focus-floating");
+    let focused = s.grid.child_at(0, 0).unwrap();
+    let controls = focused.observe_controllers();
+    let double_click = (0..controls.n_items())
+        .filter_map(|i| controls.item(i)?.downcast::<gtk::GestureClick>().ok())
+        .find(|g| g.button() == 1)
+        .unwrap();
+    double_click.emit_by_name::<()>("pressed", &[&2i32, &10f64, &10f64]);
+    assert!(s.focus.borrow().is_none());
+    button_named(&s.window, "Ampliar câmera").emit_clicked();
     button_named(&s.window, "Voltar à grade").emit_clicked();
     assert!(s.focus.borrow().is_none());
     button_named(&s.window, "Ampliar câmera").emit_clicked();
@@ -357,6 +367,18 @@ fn native_crud_editor_and_focus() {
     pump_until(|| session.latest().is_some());
     settle();
     capture(&s.window, "07-monitor");
+    set_fullscreen(&s, true);
+    assert!(!s.sidebar.is_visible());
+    assert!(!s.header.upgrade().unwrap().is_visible());
+    assert!(!s.focus_bar.upgrade().unwrap().is_visible());
+    capture(&s.window, "17-streams-fullscreen");
+    assert!(widgets(&s.grid)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Label>().ok())
+        .filter(|l| l.text() == "Portaria de teste")
+        .all(|l| !l.is_mapped()));
+    set_fullscreen(&s, false);
+    assert!(s.sidebar.is_visible());
     s.window.set_default_size(720, 500);
     pump_until(|| !s.sidebar.is_visible());
     assert!(s.preferences.borrow().sidebar);
@@ -366,16 +388,50 @@ fn native_crud_editor_and_focus() {
     // Invalid panel edits report errors inside the panel dialog; no work is lost.
     editor::open(&s, v.clone());
     let d = dialog("Editor de Views");
+    settle();
+    let grid = widgets(&d)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Grid>().ok())
+        .find(|g| g.child_at(11, 11).is_some())
+        .unwrap();
+    let controllers = grid.observe_controllers();
+    let drag = (0..controllers.n_items())
+        .find_map(|i| controllers.item(i)?.downcast::<gtk::GestureDrag>().ok())
+        .unwrap();
+    let cw = f64::from(grid.width()) / 12.;
+    let ch = f64::from(grid.height()) / 12.;
+    drag.emit_by_name::<()>("drag-begin", &[&(cw * 7. + 3.), &(ch * 7. + 3.)]);
+    drag.emit_by_name::<()>("drag-update", &[&(cw * 3.), &(ch * 2.)]);
+    drag.emit_by_name::<()>("drag-end", &[&(cw * 3.), &(ch * 2.)]);
+    button_named(&dialog("Escolher câmera"), "Portaria de teste").emit_clicked();
+    assert!(widgets(&d)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Button>().ok())
+        .any(|b| b.label().as_deref() == Some("Portaria de teste\n4 × 3")));
+    capture(&d, "19-custom-dashboard");
+    let body = button_named(&d, "Portaria de teste\n4 × 3");
+    let handle = body.parent().unwrap().last_child().unwrap();
+    let controllers = handle.observe_controllers();
+    let resize = (0..controllers.n_items())
+        .find_map(|i| controllers.item(i)?.downcast::<gtk::GestureDrag>().ok())
+        .unwrap();
+    resize.emit_by_name::<()>("drag-end", &[&cw, &ch]);
+    assert!(widgets(&d)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Button>().ok())
+        .any(|b| b.label().as_deref() == Some("Portaria de teste\n5 × 4")));
+    button_named(&d, "Desfazer layout").emit_clicked();
+    button_named(&d, "Desfazer layout").emit_clicked();
     button_named(&d, "+").emit_clicked();
     button_named(&dialog("Escolher câmera"), "Portaria de teste").emit_clicked();
-    button_named(&d, "Portaria de teste\n1 × 1").emit_clicked();
+    button_named(&d, "Portaria de teste\n6 × 6").emit_clicked();
     let panel = dialog("Configurar painel");
     let controls: Vec<_> = widgets(&panel)
         .into_iter()
         .filter_map(|w| w.downcast::<gtk::SpinButton>().ok())
         .collect();
-    controls[2].set_value(2.);
-    controls[3].set_value(2.);
+    controls[2].set_value(12.);
+    controls[3].set_value(12.);
     panel.response(gtk::ResponseType::Accept);
     assert!(panel.is_visible());
     assert!(widgets(&panel)
@@ -491,6 +547,38 @@ fn native_crud_editor_and_focus() {
     assert_eq!(active_view(&s).unwrap().name, "Garagem");
     assert_eq!(s.view_list.selected_row().unwrap().index(), 1);
     ptz_activation_is_bounded(&s);
+    auth::configure(&s, &s.window);
+    let password_dialog = dialog("Senha do aplicativo");
+    let password_fields: Vec<_> = widgets(&password_dialog)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+        .collect();
+    password_fields[1].set_text("gtk-fixture-password");
+    password_fields[2].set_text("gtk-fixture-password");
+    password_dialog.response(gtk::ResponseType::Accept);
+    pump_until(|| Store::open(&path).unwrap().has_app_password().unwrap());
+    auth::lock(&s);
+    pump_until(|| s.locked.get());
+    capture(&s.window, "18-application-locked");
+    assert!(s.grid.first_child().is_none());
+    let field = widgets(&s.window)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+        .unwrap();
+    field.set_text("wrong");
+    button_named(&s.window, "Desbloquear").emit_clicked();
+    pump_until(|| {
+        widgets(&s.window)
+            .into_iter()
+            .filter_map(|w| w.downcast::<gtk::Label>().ok())
+            .any(|l| l.text() == "Senha incorreta.")
+    });
+    assert!(s.locked.get());
+    pump_until(|| button_named(&s.window, "Desbloquear").is_sensitive());
+    field.set_text("gtk-fixture-password");
+    button_named(&s.window, "Desbloquear").emit_clicked();
+    pump_until(|| !s.locked.get());
+    assert!(s.grid.first_child().is_some());
     s.window.close();
     jobs::flush_preferences();
     server_stop.store(true, std::sync::atomic::Ordering::Release);

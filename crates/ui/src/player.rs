@@ -38,12 +38,17 @@ mod imp {
             let obj = self.obj();
             let w = obj.width() as f32;
             let h = obj.height() as f32;
+            snapshot.push_rounded_clip(&gtk::gsk::RoundedRect::from_rect(
+                graphene::Rect::new(0., 0., w, h),
+                10.,
+            ));
             snapshot.append_color(
                 &gdk::RGBA::new(0.025, 0.03, 0.035, 1.),
                 &graphene::Rect::new(0., 0., w, h),
             );
             let binding = self.texture.borrow();
             let Some(texture) = binding.as_ref() else {
+                snapshot.pop();
                 return;
             };
             let tw = texture.width() as f32;
@@ -67,6 +72,7 @@ mod imp {
             let y = (h - dh) / 2. + (py as f32).clamp(-limit_y, limit_y);
             snapshot.push_clip(&graphene::Rect::new(0., 0., w, h));
             snapshot.append_texture(texture, &graphene::Rect::new(x, y, dw, dh));
+            snapshot.pop();
             snapshot.pop();
         }
     }

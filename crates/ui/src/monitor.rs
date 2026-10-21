@@ -1,5 +1,8 @@
 use super::*;
 pub(crate) fn render(s: &Shared) {
+    if s.locked.get() {
+        return;
+    }
     let view = active_view(s);
     let valid_focus = s.focus.borrow().as_ref().is_none_or(|id| {
         view.as_ref()
@@ -8,9 +11,7 @@ pub(crate) fn render(s: &Shared) {
     if !valid_focus {
         s.focus.borrow_mut().take();
     }
-    if let Some(bar) = s.focus_bar.upgrade() {
-        bar.set_visible(s.focus.borrow().is_some());
-    }
+    update_chrome(s);
     if let Ok(m) = s.manager.lock() {
         m.audio.select(None);
     }
@@ -37,21 +38,37 @@ pub(crate) fn render(s: &Shared) {
         return;
     }
     let focus = s.focus.borrow().clone();
+    let (left, top, right, bottom) = if s.presentation.get() && focus.is_none() {
+        (
+            view.panels.iter().map(|p| p.x).min().unwrap_or(0),
+            view.panels.iter().map(|p| p.y).min().unwrap_or(0),
+            view.panels
+                .iter()
+                .map(|p| p.x + p.width)
+                .max()
+                .unwrap_or(view.columns),
+            view.panels
+                .iter()
+                .map(|p| p.y + p.height)
+                .max()
+                .unwrap_or(view.rows),
+        )
+    } else {
+        (0, 0, view.columns, view.rows)
+    };
     if focus.is_none() {
-        for y in 0..view.rows {
-            for x in 0..view.columns {
+        for y in top..bottom {
+            for x in left..right {
                 if !view
                     .panels
                     .iter()
                     .any(|p| x >= p.x && x < p.x + p.width && y >= p.y && y < p.y + p.height)
                 {
-                    let placeholder = gtk::Frame::new(None);
-                    let label = gtk::Label::new(Some("Painel vazio"));
-                    label.add_css_class("dim-label");
-                    placeholder.set_child(Some(&label));
+                    let placeholder = gtk::Box::new(gtk::Orientation::Vertical, 0);
                     placeholder.set_hexpand(true);
                     placeholder.set_vexpand(true);
-                    s.grid.attach(&placeholder, x as i32, y as i32, 1, 1);
+                    s.grid
+                        .attach(&placeholder, (x - left) as i32, (y - top) as i32, 1, 1);
                 }
             }
         }
@@ -76,7 +93,12 @@ pub(crate) fn render(s: &Shared) {
         let id = panel.id.clone();
         gesture.connect_pressed(move |_, n, _, _| {
             if n == 2 {
-                *s2.focus.borrow_mut() = Some(id.clone());
+                let current = s2.focus.borrow().clone();
+                *s2.focus.borrow_mut() = if current.as_ref() == Some(&id) {
+                    None
+                } else {
+                    Some(id.clone())
+                };
                 render(&s2);
             }
         });
@@ -86,8 +108,8 @@ pub(crate) fn render(s: &Shared) {
         } else {
             s.grid.attach(
                 &tile,
-                panel.x as i32,
-                panel.y as i32,
+                (panel.x - left) as i32,
+                (panel.y - top) as i32,
                 panel.width as i32,
                 panel.height as i32,
             );
@@ -305,6 +327,7 @@ pub(crate) fn tile(
         }
     });
     tile.add_controller(context);
+    bar.set_visible(!s.presentation.get());
     tile.append(&bar);
     let camera_id = camera.id.clone();
     let state = Rc::downgrade(s);

@@ -1,3 +1,4 @@
+mod auth;
 mod camera;
 mod diagnostics;
 mod editor;
@@ -36,14 +37,41 @@ pub(crate) struct State {
     heading: gtk::Label,
     status: gtk::Label,
     edit_view: glib::WeakRef<gtk::Button>,
-    focus_bar: glib::WeakRef<gtk::Box>,
+    focus_bar: glib::WeakRef<gtk::Button>,
+    presentation: std::cell::Cell<bool>,
+    locked: std::cell::Cell<bool>,
+    header: glib::WeakRef<gtk::HeaderBar>,
+    separator: glib::WeakRef<gtk::Separator>,
+    sidebar_toggle: glib::WeakRef<gtk::ToggleButton>,
     path: PathBuf,
     manager: Arc<Mutex<SessionManager>>,
     runtime: Arc<tokio::runtime::Runtime>,
 }
+#[derive(Default)]
+pub struct LaunchOptions {
+    pub view: Option<String>,
+    pub fullscreen: bool,
+    pub data_dir: Option<PathBuf>,
+    pub unlock_password: Option<String>,
+}
 pub fn run() {
-    let app = gtk::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(|app| {
+    run_with_options(LaunchOptions::default());
+}
+pub fn run_with_options(options: LaunchOptions) {
+    let options = Rc::new(RefCell::new(options));
+    let separate = options.borrow().view.is_some()
+        || options.borrow().fullscreen
+        || options.borrow().data_dir.is_some()
+        || options.borrow().unlock_password.is_some();
+    let app = gtk::Application::builder()
+        .application_id(APP_ID)
+        .flags(if separate {
+            gio::ApplicationFlags::NON_UNIQUE
+        } else {
+            gio::ApplicationFlags::FLAGS_NONE
+        })
+        .build();
+    app.connect_activate(move |app| {
         if let Some(window) = app.active_window() {
             window.present();
             return;
@@ -59,31 +87,88 @@ pub fn run() {
         window.set_child(Some(&loading));
         window.present();
         let weak = window.downgrade();
+        let target = options.borrow().view.clone();
+        let fullscreen = options.borrow().fullscreen;
+        let data_dir = options.borrow().data_dir.clone();
+        let password = options.borrow_mut().unlock_password.take();
         jobs::run(
-            || -> Result<_> {
-                let path = if let Some(p) = std::env::var_os("CCTV_VIEW_DATA_DIR") {
-                    let p = PathBuf::from(p);
+            move || -> Result<_> {
+                let path = if let Some(p) =
+                    data_dir.or_else(|| std::env::var_os("CCTV_VIEW_DATA_DIR").map(PathBuf::from))
+                {
                     std::fs::create_dir_all(&p)?;
                     p.join("cctv.db")
                 } else {
                     Store::default_path()?
                 };
                 let store = Store::open(&path)?;
-                Ok((path, store.cameras()?, store.views()?, store.preferences()?))
+                let locked = store.has_app_password()?
+                    && !password
+                        .as_deref()
+                        .map(|p| store.verify_app_password(p))
+                        .transpose()?
+                        .unwrap_or(false);
+                Ok((
+                    path,
+                    store.cameras()?,
+                    store.views()?,
+                    store.preferences()?,
+                    locked,
+                ))
             },
             move |result| {
                 let Some(window) = weak.upgrade() else {
                     return;
                 };
                 match result {
-                    Ok((path, cameras, views, prefs)) => match tokio::runtime::Runtime::new() {
-                        Ok(runtime) => {
-                            let _ = build(window, path, cameras, views, prefs, Arc::new(runtime));
+                    Ok((path, cameras, views, prefs, locked)) => {
+                        match tokio::runtime::Runtime::new() {
+                            Ok(runtime) => {
+                                let weak = window.downgrade();
+                                let gate_path = path.clone();
+                                let start = move || {
+                                    if let Some(window) = weak.upgrade() {
+                                        let state = build(
+                                            window,
+                                            path,
+                                            cameras,
+                                            views,
+                                            prefs,
+                                            Arc::new(runtime),
+                                        );
+                                        if let Some(target) = target {
+                                            let found = state
+                                                .views
+                                                .borrow()
+                                                .iter()
+                                                .find(|v| v.id == target || v.name == target)
+                                                .map(|v| v.id.clone());
+                                            if let Some(id) = found {
+                                                *state.current.borrow_mut() = Some(id);
+                                                refresh(&state);
+                                            } else {
+                                                message(
+                                                    &state.window,
+                                                    "View solicitada não encontrada.",
+                                                );
+                                            }
+                                        }
+                                        if fullscreen {
+                                            set_fullscreen(&state, true);
+                                        }
+                                    }
+                                };
+                                if locked {
+                                    auth::gate(&window, gate_path, start);
+                                } else {
+                                    start();
+                                }
+                            }
+                            Err(e) => {
+                                message(&window, &format!("Não foi possível iniciar tarefas: {e}"))
+                            }
                         }
-                        Err(e) => {
-                            message(&window, &format!("Não foi possível iniciar tarefas: {e}"))
-                        }
-                    },
+                    }
                     Err(e) => message(
                         &window,
                         &format!("Não foi possível abrir a biblioteca: {e}"),
@@ -103,7 +188,7 @@ pub fn run() {
     });
     app.add_action(&quit);
     app.set_accels_for_action("app.quit", &["<Primary>q"]);
-    app.run();
+    app.run_with_args(&["cctv-view"]);
     jobs::flush_preferences();
 }
 fn build(
@@ -176,15 +261,13 @@ fn build(
     content.append(&sidebar);
     let separator = gtk::Separator::new(gtk::Orientation::Vertical);
     content.append(&separator);
-    let focus_bar = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-    margins(&focus_bar, 8);
-    let back = gtk::Button::with_label("Voltar à grade");
-    focus_bar.append(&back);
-    let focus_hint = gtk::Label::new(Some("Câmera em foco · Escape também retorna à grade"));
-    focus_hint.set_wrap(true);
-    focus_bar.append(&focus_hint);
+    let focus_bar = button("Voltar à grade", "window-close-symbolic");
+    focus_bar.set_halign(gtk::Align::End);
+    focus_bar.set_valign(gtk::Align::Start);
+    margins(&focus_bar, 12);
+    focus_bar.set_size_request(36, 36);
+    focus_bar.add_css_class("cctv-floating-close");
     focus_bar.set_visible(false);
-    root.append(&focus_bar);
     let grid = gtk::Grid::builder()
         .column_homogeneous(true)
         .row_homogeneous(true)
@@ -195,7 +278,11 @@ fn build(
         .build();
     margins(&grid, 12);
     content.append(&grid);
-    root.append(&content);
+    let stage = gtk::Overlay::new();
+    stage.set_child(Some(&content));
+    stage.add_overlay(&focus_bar);
+    stage.set_vexpand(true);
+    root.append(&stage);
     content.set_vexpand(true);
     let status = gtk::Label::new(None);
     status.set_xalign(0.);
@@ -230,6 +317,11 @@ fn build(
         status,
         edit_view: edit.downgrade(),
         focus_bar: focus_bar.downgrade(),
+        presentation: std::cell::Cell::new(false),
+        locked: std::cell::Cell::new(false),
+        header: header.downgrade(),
+        separator: separator.downgrade(),
+        sidebar_toggle: sidebar_toggle.downgrade(),
         path,
         manager: Arc::new(Mutex::new(SessionManager::default())),
         runtime,
@@ -242,8 +334,9 @@ fn build(
     let s = state.clone();
     let sep = separator.clone();
     sidebar_toggle.connect_toggled(move |b| {
-        s.sidebar.set_visible(b.is_active());
-        sep.set_visible(b.is_active());
+        s.sidebar
+            .set_visible(b.is_active() && !s.presentation.get());
+        sep.set_visible(b.is_active() && !s.presentation.get());
         if changing.get() {
             return;
         }
@@ -258,6 +351,9 @@ fn build(
             return glib::ControlFlow::Break;
         };
         let now = window.width() < 900;
+        if s.presentation.get() {
+            return glib::ControlFlow::Continue;
+        }
         if compact.get() != Some(now) {
             compact.set(Some(now));
             if let Some(toggle) = weak_toggle.upgrade() {
@@ -269,6 +365,14 @@ fn build(
             }
         }
         glib::ControlFlow::Continue
+    });
+    let weak = Rc::downgrade(&state);
+    state.window.connect_fullscreened_notify(move |window| {
+        if let Some(s) = weak.upgrade() {
+            if s.presentation.replace(window.is_fullscreen()) != window.is_fullscreen() {
+                render(&s);
+            }
+        }
     });
     let weak_state = Rc::downgrade(&state);
     state.view_list.connect_row_activated(move |_, row| {
@@ -284,7 +388,7 @@ fn build(
         }
     });
     let s = state.clone();
-    back.connect_clicked(move |_| {
+    focus_bar.connect_clicked(move |_| {
         s.focus.borrow_mut().take();
         render(&s);
     });
@@ -301,7 +405,7 @@ fn build(
         }
     });
     let s = state.clone();
-    fullscreen.connect_clicked(move |_| toggle_fullscreen(&s.window));
+    fullscreen.connect_clicked(move |_| set_fullscreen(&s, !s.presentation.get()));
     let s = state.clone();
     settings.connect_clicked(move |_| settings::open(&s));
     let keys = gtk::EventControllerKey::new();
@@ -310,15 +414,19 @@ fn build(
         let Some(s) = weak_state.upgrade() else {
             return glib::Propagation::Proceed;
         };
+        if s.locked.get() {
+            return glib::Propagation::Proceed;
+        }
         match key {
             gdk::Key::Escape => {
                 let had_focus = s.focus.borrow_mut().take().is_some();
-                if had_focus {
+                if s.presentation.get() {
+                    set_fullscreen(&s, false);
+                } else if had_focus {
                     render(&s);
                 }
-                s.window.unfullscreen();
             }
-            gdk::Key::F11 => toggle_fullscreen(&s.window),
+            gdk::Key::F11 => set_fullscreen(&s, !s.presentation.get()),
             _ => return glib::Propagation::Proceed,
         }
         glib::Propagation::Stop
@@ -434,12 +542,31 @@ pub(crate) fn confirm(parent: &impl IsA<gtk::Window>, text: &str, action: impl F
     });
     d.present();
 }
-fn toggle_fullscreen(w: &gtk::ApplicationWindow) {
-    if w.is_fullscreen() {
-        w.unfullscreen();
+fn set_fullscreen(s: &Shared, active: bool) {
+    s.presentation.set(active);
+    if active {
+        s.window.fullscreen();
     } else {
-        w.fullscreen();
+        s.window.unfullscreen();
     }
+    render(s);
+}
+fn update_chrome(s: &Shared) {
+    let active = s.presentation.get();
+    if let Some(header) = s.header.upgrade() {
+        header.set_visible(!active);
+    }
+    s.window.set_decorated(!active);
+    let show_sidebar = !active && s.sidebar_toggle.upgrade().is_some_and(|b| b.is_active());
+    s.sidebar.set_visible(show_sidebar);
+    if let Some(sep) = s.separator.upgrade() {
+        sep.set_visible(show_sidebar);
+    }
+    if let Some(back) = s.focus_bar.upgrade() {
+        back.set_visible(!active && s.focus.borrow().is_some());
+    }
+    s.status.set_visible(!active && !s.status.text().is_empty());
+    margins(&s.grid, if active { 0 } else { 12 });
 }
 pub(crate) fn active_view(s: &Shared) -> Option<View> {
     s.views

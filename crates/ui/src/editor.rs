@@ -13,7 +13,8 @@ struct Editor {
     columns: gtk::SpinButton,
     rows: gtk::SpinButton,
 }
-pub fn open(s: &Shared, view: View) {
+pub fn open(s: &Shared, mut view: View) {
+    let conversion_error = view.scale_grid(12, 12).err();
     let d = gtk::Dialog::builder()
         .transient_for(&s.window)
         .destroy_with_parent(true)
@@ -50,20 +51,20 @@ pub fn open(s: &Shared, view: View) {
         "4 × 4",
         "Principal + secundárias",
     ]);
-    let columns = gtk::SpinButton::with_range(1., 16., 1.);
-    columns.set_value(view.columns as f64);
-    let rows = gtk::SpinButton::with_range(1., 16., 1.);
-    rows.set_value(view.rows as f64);
+    let columns = gtk::SpinButton::with_range(1., 12., 1.);
+    columns.set_value(4.);
+    let rows = gtk::SpinButton::with_range(1., 12., 1.);
+    rows.set_value(4.);
     for (label, control) in [
         ("Layout", preset.clone().upcast::<gtk::Widget>()),
-        ("Colunas", columns.clone().upcast()),
-        ("Linhas", rows.clone().upcast()),
+        ("Largura do novo painel", columns.clone().upcast()),
+        ("Altura do novo painel", rows.clone().upcast()),
     ] {
         let group = gtk::Box::new(gtk::Orientation::Vertical, 6);
         forms::row(&group, label, &control);
         layout.insert(&group, -1);
     }
-    let resize = gtk::Button::with_label("Aplicar grade");
+    let resize = gtk::Button::with_label("Adicionar painel");
     resize.set_valign(gtk::Align::End);
     layout.insert(&resize, -1);
     root.append(&layout);
@@ -87,13 +88,13 @@ pub fn open(s: &Shared, view: View) {
     forms::section(&library, "Câmeras");
     forms::help(
         &library,
-        "Clique para adicionar ao primeiro espaço livre ou arraste até uma célula.",
+        "Grade 12 × 12. Clique para adicionar ou arraste uma câmera. Desenhe um retângulo na grade para escolher tamanho e posição.",
     );
     let grid = gtk::Grid::builder()
         .column_homogeneous(true)
         .row_homogeneous(true)
-        .column_spacing(6)
-        .row_spacing(6)
+        .column_spacing(3)
+        .row_spacing(3)
         .hexpand(true)
         .vexpand(true)
         .build();
@@ -143,15 +144,109 @@ pub fn open(s: &Shared, view: View) {
         .build();
     content.append(&library_scroll);
     let canvas_scroll = gtk::ScrolledWindow::builder()
-        .child(&editor.grid)
         .hexpand(true)
         .vexpand(true)
         .min_content_width(240)
         .min_content_height(160)
         .build();
+    let selection = Rc::new(std::cell::Cell::new(None::<(u8, u8, u8, u8)>));
+    let canvas = gtk::Overlay::new();
+    canvas.set_child(Some(&editor.grid));
+    canvas_scroll.set_child(Some(&canvas));
+    canvas.set_hexpand(true);
+    canvas.set_vexpand(true);
+    let outline = gtk::DrawingArea::new();
+    outline.set_can_target(false);
+    canvas.add_overlay(&outline);
+    let selected = selection.clone();
+    let dimensions = editor.draft.clone();
+    outline.set_draw_func(move |_, cr, width, height| {
+        if let Some((x, y, w, h)) = selected.get() {
+            let v = dimensions.borrow();
+            let cw = width as f64 / f64::from(v.columns);
+            let ch = height as f64 / f64::from(v.rows);
+            cr.set_source_rgba(0.2, 0.6, 1., 0.3);
+            cr.rectangle(
+                f64::from(x) * cw,
+                f64::from(y) * ch,
+                f64::from(w) * cw,
+                f64::from(h) * ch,
+            );
+            let _ = cr.fill_preserve();
+            cr.set_source_rgb(0.2, 0.6, 1.);
+            cr.set_line_width(2.);
+            let _ = cr.stroke();
+        }
+    });
+    let drag = gtk::GestureDrag::new();
+    drag.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let origin = Rc::new(std::cell::Cell::new(None::<(f64, f64)>));
+    let start = origin.clone();
+    let e = editor.clone();
+    drag.connect_drag_begin(move |gesture, x, y| {
+        let view = e.draft.borrow();
+        let column = (x / f64::from(e.grid.width().max(1)) * f64::from(view.columns)).floor() as u8;
+        let row = (y / f64::from(e.grid.height().max(1)) * f64::from(view.rows)).floor() as u8;
+        let empty = x >= 0.
+            && y >= 0.
+            && column < view.columns
+            && row < view.rows
+            && !view.panels.iter().any(|p| {
+                column >= p.x && column < p.x + p.width && row >= p.y && row < p.y + p.height
+            });
+        if empty && !e.preview.get() {
+            start.set(Some((x, y)));
+        } else {
+            start.set(None);
+            gesture.set_state(gtk::EventSequenceState::Denied);
+        }
+    });
+    let start = origin.clone();
+    let selected = selection.clone();
+    let drawing = outline.downgrade();
+    let e = editor.clone();
+    drag.connect_drag_update(move |gesture, dx, dy| {
+        if let Some((sx, sy)) = start.get() {
+            gesture.set_state(gtk::EventSequenceState::Claimed);
+            let v = e.draft.borrow();
+            let cell = |p: f64, axis: i32, count: u8| {
+                (p / f64::from(axis.max(1)) * f64::from(count))
+                    .floor()
+                    .clamp(0., f64::from(count - 1)) as u8
+            };
+            let x1 = cell(sx.min(sx + dx), e.grid.width(), v.columns);
+            let x2 = cell(sx.max(sx + dx), e.grid.width(), v.columns);
+            let y1 = cell(sy.min(sy + dy), e.grid.height(), v.rows);
+            let y2 = cell(sy.max(sy + dy), e.grid.height(), v.rows);
+            selected.set(Some((x1, y1, x2 - x1 + 1, y2 - y1 + 1)));
+            if let Some(d) = drawing.upgrade() {
+                d.queue_draw();
+            }
+        }
+    });
+    let drawing = outline.downgrade();
+    let e = editor.clone();
+    drag.connect_drag_end(move |_, dx, dy| {
+        let region = selection.take();
+        origin.set(None);
+        if let Some(d) = drawing.upgrade() {
+            d.queue_draw();
+        }
+        if dx.abs() + dy.abs() > 8. {
+            if let Some((x, y, w, h)) = region {
+                choose_camera(&e, Some((x, y)), (w, h));
+            }
+        }
+    });
+    editor.grid.add_controller(drag);
     content.append(&canvas_scroll);
     root.append(&editor.feedback);
     draw(&editor);
+    if let Some(error) = conversion_error {
+        editor
+            .feedback
+            .set_text(&format!("Grade original preservada: {error}"));
+    }
     let e = editor.clone();
     preset.connect_selected_notify(move |p| {
         let (c, r, main) = match p.selected() {
@@ -164,8 +259,11 @@ pub fn open(s: &Shared, view: View) {
             _ => return,
         };
         let mut v = e.draft.borrow().clone();
-        match v.reflow(c, r, main) {
+        match v.dashboard_layout(c, r, main) {
             Ok(()) => {
+                e.columns
+                    .set_value(if main { 4. } else { f64::from(12 / c) });
+                e.rows.set_value(if main { 4. } else { f64::from(12 / r) });
                 apply(&e, v);
             }
             Err(err) => {
@@ -177,10 +275,11 @@ pub fn open(s: &Shared, view: View) {
     let e = editor.clone();
     let layout_choice = preset.clone();
     resize.connect_clicked(move |_| {
-        let mut v = e.draft.borrow().clone();
-        v.columns = e.columns.value_as_int() as u8;
-        v.rows = e.rows.value_as_int() as u8;
-        apply(&e, v);
+        choose_camera(
+            &e,
+            None,
+            (e.columns.value_as_int() as u8, e.rows.value_as_int() as u8),
+        );
         layout_choice.set_selected(0);
     });
     let e = editor.clone();
@@ -188,7 +287,14 @@ pub fn open(s: &Shared, view: View) {
         let mut v = e.draft.borrow().clone();
         let mut added = 0;
         for c in e.state.cameras.borrow().iter() {
-            if !v.panels.iter().any(|p| p.camera_id == c.id) && v.add_camera(&c.id, None).is_ok() {
+            if !v.panels.iter().any(|p| p.camera_id == c.id)
+                && v.add_camera_sized(
+                    &c.id,
+                    None,
+                    (e.columns.value_as_int() as u8, e.rows.value_as_int() as u8),
+                )
+                .is_ok()
+            {
                 added += 1;
             }
         }
@@ -282,8 +388,7 @@ fn draw(e: &Editor) {
         e.grid.remove(&c);
     }
     let view = e.draft.borrow().clone();
-    e.columns.set_value(view.columns as f64);
-    e.rows.set_value(view.rows as f64);
+
     if let Some(undo) = e.undo.upgrade() {
         undo.set_sensitive(!e.history.borrow().is_empty());
     }
@@ -301,7 +406,8 @@ fn draw(e: &Editor) {
             b.set_tooltip_text(Some("Clique para escolher uma câmera ou arraste até aqui"));
             b.set_hexpand(true);
             b.set_vexpand(true);
-            b.set_size_request(50, 45);
+            b.set_size_request(20, 20);
+            b.add_css_class("cctv-grid-cell");
             b.set_sensitive(!preview);
             let e2 = e.clone();
             b.update_property(&[gtk::accessible::Property::Label(&format!(
@@ -309,7 +415,16 @@ fn draw(e: &Editor) {
                 x + 1,
                 y + 1
             ))]);
-            b.connect_clicked(move |_| choose_camera(&e2, (x, y)));
+            b.connect_clicked(move |_| {
+                choose_camera(
+                    &e2,
+                    Some((x, y)),
+                    (
+                        e2.columns.value_as_int() as u8,
+                        e2.rows.value_as_int() as u8,
+                    ),
+                )
+            });
             drop_target(e, &b, x, y);
             e.grid.attach(&b, x as i32, y as i32, 1, 1);
         }
@@ -331,7 +446,7 @@ fn draw(e: &Editor) {
             continue;
         }
         let container = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        container.add_css_class("card");
+        container.add_css_class("cctv-editor-panel");
         container.set_hexpand(true);
         container.set_vexpand(true);
         let b = gtk::Button::with_label(&format!(
@@ -344,6 +459,11 @@ fn draw(e: &Editor) {
         ));
         b.set_hexpand(true);
         b.set_vexpand(true);
+        b.set_has_frame(false);
+        if let Some(label) = b.child().and_then(|w| w.downcast::<gtk::Label>().ok()) {
+            label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            label.set_width_chars(1);
+        }
         container.append(&b);
         let e2 = e.clone();
         let id = p.id.clone();
@@ -357,6 +477,8 @@ fn draw(e: &Editor) {
         drop_target(e, &b, p.x, p.y);
         let handle = gtk::Label::new(Some("↘"));
         handle.set_halign(gtk::Align::End);
+        handle.set_size_request(24, 24);
+        handle.add_css_class("cctv-resize-handle");
         handle.set_tooltip_text(Some("Arraste para redimensionar com snap à grade"));
         container.append(&handle);
         let drag = gtk::GestureDrag::new();
@@ -431,8 +553,8 @@ fn drop_target(e: &Editor, widget: &impl IsA<gtk::Widget>, x: u8, y: u8) {
                     camera_id: id.into(),
                     x,
                     y,
-                    width: 1,
-                    height: 1,
+                    width: e.columns.value_as_int() as u8,
+                    height: e.rows.value_as_int() as u8,
                     aspect: Aspect::Fit,
                 });
             }
@@ -571,6 +693,13 @@ fn panel_settings(e: &Editor, id: &str) {
 }
 
 fn clear_grid(grid: &gtk::Grid) {
+    let controllers = grid.observe_controllers();
+    let owned: Vec<_> = (0..controllers.n_items())
+        .filter_map(|i| controllers.item(i)?.downcast::<gtk::EventController>().ok())
+        .collect();
+    for controller in owned {
+        grid.remove_controller(&controller);
+    }
     while let Some(child) = grid.first_child() {
         grid.remove(&child);
     }
@@ -581,14 +710,18 @@ fn add_camera(e: &Editor, id: &str, position: Option<(u8, u8)>) {
         return;
     }
     let mut v = e.draft.borrow().clone();
-    match v.add_camera(id, position) {
+    match v.add_camera_sized(
+        id,
+        position,
+        (e.columns.value_as_int() as u8, e.rows.value_as_int() as u8),
+    ) {
         Ok(()) => {
             apply(e, v);
         }
         Err(err) => e.feedback.set_text(&err.to_string()),
     }
 }
-fn choose_camera(e: &Editor, position: (u8, u8)) {
+fn choose_camera(e: &Editor, position: Option<(u8, u8)>, size: (u8, u8)) {
     if e.preview.get() {
         return;
     }
@@ -617,7 +750,15 @@ fn choose_camera(e: &Editor, position: (u8, u8)) {
         let id = c.id.clone();
         let weak = d.downgrade();
         b.connect_clicked(move |_| {
-            add_camera(&e, &id, Some(position));
+            let mut v = e.draft.borrow().clone();
+            match v.add_camera_sized(&id, position, size) {
+                Ok(()) => {
+                    apply(&e, v);
+                }
+                Err(err) => {
+                    e.feedback.set_text(&err.to_string());
+                }
+            }
             if let Some(d) = weak.upgrade() {
                 d.close();
             }
