@@ -1,0 +1,35 @@
+# Revisão UI/UX — 0.1.1
+
+Revisão crítica independente pelo subagente Schrodinger, seguida de implementação e conferência pontual. A interface permanece GTK4 nativa e usa o tema do sistema. Prioridades: organização por tarefa, ações junto de seu alvo, alternativas ao arrasto, preservação dos dados e recuperação de erros.
+
+| Problema identificado | Correção |
+|---|---|
+| Endpoint ONVIF não persistia ao salvar sem consultar | Coletor valida/salva explicitamente e invalida perfis, capacidades e autorização ao mudar dispositivo |
+| Botões + e biblioteca aceitavam somente arrasto | Seletor de câmera por clique/ativação de teclado e inserção pela lista; DnD preservado |
+| Nome da View ilegível em janela pequena | Nome em linha própria; controles de grade agrupados abaixo |
+| URL, endereço e porta competiam como fontes da conexão | URL completa define host/porta e destino informativo |
+| Cadastro plano com opções avançadas antes das credenciais | Abas Conexão, ONVIF e Avançado; seções e rolagem própria |
+| Feedback fora da área visível ou atrás de modal | Rodapé fixo no cadastro; erro local no diálogo do painel; foco no campo inválido |
+| Preset substituía painéis e câmeras | Reflow preserva identidade/câmera/proporção, rejeita perda e oferece até 20 passos de desfazer; preencher é explícito |
+| Estado vazio sem ação e comandos sem alvo habilitados | Adicionar câmera/Criar View/Escolher câmeras e Editar View desabilitado sem seleção |
+| Foco dependia de duplo clique e retorno não era visível | Enter, menu Ampliar câmera e botão Voltar à grade; Escape preservado |
+| PTZ dependia de gestos do mouse | Ativação padrão de botão gera pulso limitado com Stop; atalhos de diagonais/zoom; campos preservam teclas de edição |
+| Rótulos sem associação acessível explícita | Relação rótulo/controle e nomes acessíveis GTK nos comandos |
+| Ações de View distantes, inicial sem indicador e sidebar ocupava janela pequena | Menu por linha, badges Favorita/Inicial, ordenação transacional e recolhimento adaptativo |
+
+A segunda revisão encontrou três regressões, também corrigidas: consulta ONVIF reabilita o seletor e permite escolher outro perfil; favoritar outra View preserva seleção e reprodução; duplicação limpa foco e renderização descarta referência a painel removido.
+
+## Evidência
+
+- 14 testes padrão de core/storage/media/ONVIF passaram, além da regressão GTK ampliada no Xvfb; fmt, Clippy com warnings negados e build release passaram.
+- GTK real: endpoint salvo sem consulta/invalidação; mock ONVIF com dois perfis selecionáveis e URLs distintas; inserção por lista/+ e drop; preset/undo e cancelamento; erro de sobreposição local; Enter/menu/retorno/Escape; sidebar pequena/grande; favoritos de outra View, duplicação em foco, ordenação e exclusão da inicial; movimento/Stop PTZ e liberação do estado.
+- AppImage 0.1.1 gerado e smoke por extração/Xvfb com banco temporário passou; checksum conferido. A conferência pontual final do revisor não encontrou novos problemas nos três ajustes adicionais.
+- Capturas de monitor, cadastro, editor e erro local inspecionadas. Exemplos pequenos abaixo; vídeo é uma fixture sintética, sem câmeras ou credenciais privadas.
+
+![Monitor em janela pequena](screenshots/monitor-small.png)
+
+![Cadastro com rolagem e rodapé fixo](screenshots/camera-small.png)
+
+![Editor com nome legível e ações de inserção](screenshots/editor-small.png)
+
+Capturas mostram widgets no tema instalado; não substituem testes humanos. Leitor de tela/Orca, arrasto físico, Wayland/HiDPI, motor PTZ, VA-API e câmeras reais continuam NOT VERIFIED. Ver TESTING.md e FEATURES.md para reprodução e limites. AppImage e checksum ficam em dist/; somente commits locais.

@@ -16,7 +16,7 @@ ADR 0001 registra a fronteira Rust/C das bibliotecas nativas, GDK MemoryTexture 
 
 - Auditoria cargo-audit 0.22.2: quick-xml atualizado para 0.42.0 após dois avisos; auditoria final com zero vulnerabilidades/avisos em 255 dependências. Parser reforçado e regressões repetidas.
 - `cargo fmt --all -- --check`, Clippy com `-D warnings`, suíte workspace e release passaram via `scripts/check.sh`.
-- Suíte padrão: 11 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
+- Suíte padrão: 14 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
 - Mídia: quatro sessões H.264/AAC HTTP simultâneas, JPEG, frame BGRA real, descarte, reconexão após EOF e shutdown.
 - `scripts/test-protocols.sh`: HTTP TS, JPEG, MJPEG, HLS, HEVC, RTSP TCP com autenticação; senha errada, porta fechada e TLS não confiável rejeitados. SOAP autenticado validou informações, capacidades, perfil/URI, movimento/Stop e presets.
 - Descoberta: teste UDP local valida resposta correlacionada, deduplicação e recusa de endereço inválido/resposta não relacionada.
@@ -33,3 +33,9 @@ Logs desta sessão estão em /tmp/cctv-check.log, /tmp/cctv-protocols.log, /tmp/
 Consultar FEATURES.md: não há homologação de fabricante, hardware PTZ/VA-API, A/V prolongado, Wayland/HiDPI/leitor de tela, cargas de referência nem AppImage em outra máquina. Media2 exclusivo e HTTP Digest SOAP não estão implementados; erros são explícitos. Não declarar 1.0 completa.
 
 Próxima ação: executar H01 na máquina/câmeras de referência, registrar matriz por modelo e métricas; validar o AppImage em VM Zorin 18 separada e revisar licenças/fontes correspondentes antes de distribuição pública. Todos os recursos centrais permanecem no escopo da primeira versão homologada. Somente commits locais são autorizados; não houve push nem PR.
+
+## Revisão UI/UX 0.1.1
+
+Os 12 achados iniciais e três regressões apontadas na segunda revisão crítica foram corrigidos. Cadastro em abas e feedback fixo; endpoint ONVIF independente da consulta, invalidando dispositivo antigo; destino derivado da URL; editor com inserção por clique/teclado, reflow sem perda, undo e erro local; menus por View, indicadores e sidebar adaptativa; foco por Enter/menu e retorno visível; rótulos acessíveis e PTZ com ativação limitada. Favoritar outra View preserva monitoramento; duplicar limpa foco; referências de foco inválidas são descartadas.
+
+A regressão GTK ampliada passou com consulta SOAP de dois perfis, persistência, editor, janelas pequenas/grandes, favoritos/ordem/exclusão, movimento seguido de Stop e liberação do estado. Capturas e rastreabilidade em UI_REVIEW.md. Checks padrão passaram e o AppImage foi atualizado para 0.1.1. O pacote final iniciou/encerrou por extração no Xvfb, sem Gtk-WARNING/CRITICAL/panic; SHA256SUMS conferido. A revisão final somente leitura confirmou os três ajustes adicionais sem novos achados nesses pontos. Os testes de Secret Service e sink PulseAudio da entrega anterior continuam registrados; não foram repetidos porque os adaptadores não mudaram. Logs adicionais efêmeros: /tmp/cctv-ux-check.log, /tmp/cctv-ux-tests.log, /tmp/cctv-ux-gtk.log, /tmp/cctv-ux-appimage-build.log e /tmp/cctv-ux-appimage-smoke.log. As limitações de homologação física permanecem.

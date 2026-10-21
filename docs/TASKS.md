@@ -16,3 +16,7 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | H02 | Homologar desktop e distribuição | VM/segunda máquina | Wayland, HiDPI, temas, leitor de tela, FUSE e AppImage separado | TODO |
 | R02 | Preparar distribuição pública | R01/H01/H02 | licenças e fontes correspondentes, inventário de bibliotecas e matriz final | TODO |
 | O02 | Ampliar compatibilidade de fabricantes | dispositivos que exijam suporte | Media2, HTTP Digest SOAP e desvio de relógio com fixtures dedicadas | TODO |
+| UX01 | Corrigir persistência ONVIF, conexão e cadastro / core,ui | revisão crítica | endpoint salvo/invalidação, derivação de host/porta, campos agrupados e feedback fixo | DONE |
+| UX02 | Editor acessível e não destrutivo / core,ui | UX01 | adicionar por clique/teclado/DnD, reflow/undo, erro local, nome legível | DONE |
+| UX03 | Navegação, foco, Views e PTZ / ui | revisão crítica | ações próximas, vazio acionável, sidebar adaptativa, controles acessíveis e pulso limitado | DONE |
+| UX04 | Validar e empacotar revisão / tests,docs,packaging | UX01–UX03 | fmt/Clippy/testes/release, GTK pequeno/grande, AppImage e commits locais | DONE |

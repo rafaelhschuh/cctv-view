@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-10-21
+
+- Cadastro em abas Conexão/ONVIF/Avançado, feedback fora da rolagem e foco no campo inválido. URL do vídeo define host/porta; endpoint ONVIF é salvo sem depender de consulta e sua alteração invalida perfis/capacidades anteriores.
+- Editor com nome legível, seleção de câmera por clique/teclado além de DnD, preenchimento explícito, layouts que preservam painéis e histórico de desfazer. Erros aparecem no diálogo de painel; coordenadas visíveis começam em 1.
+- Ações junto de cada View, indicadores de favorita/inicial, ordenação transacional e sidebar adaptativa. Estados vazios oferecem ações; foco por Enter/menu e botão visível de retorno à grade.
+- Rótulos acessíveis nos controles e PTZ com ativação por teclado, pulso limitado e atalhos de diagonais/zoom sem interceptar edição de campos.
+- Regressões de modelos, persistência, GTK e movimento/Stop no simulador; AppImage atualizado. Homologação física e leitor de tela continuam pendentes.
+
 ## 0.1.0 — 2026-10-21
 
 - Workspace Rust com aplicação GTK nativa, biblioteca de câmeras e armazenamento SQLite versionado.
