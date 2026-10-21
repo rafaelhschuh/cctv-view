@@ -1,0 +1,11 @@
+[package]
+name = "cctv-media"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+cctv-core.workspace = true
+anyhow.workspace = true
+url.workspace = true
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"
