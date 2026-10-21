@@ -51,6 +51,7 @@ pub fn run() {
             .default_height(800)
             .build();
         let loading = gtk::Label::new(Some("Carregando biblioteca…"));
+        window.set_titlebar(Some(&gtk::HeaderBar::new()));
         window.set_child(Some(&loading));
         window.present();
         let weak = window.downgrade();
@@ -121,7 +122,10 @@ fn build(
         window.maximize();
     }
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    let header = gtk::HeaderBar::new();
+    let header = window
+        .titlebar()
+        .and_then(|w| w.downcast::<gtk::HeaderBar>().ok())
+        .unwrap_or_default();
     let heading = gtk::Label::new(Some("Monitoramento"));
     heading.add_css_class("title");
     header.set_title_widget(Some(&heading));
@@ -139,7 +143,9 @@ fn build(
     header.pack_end(&fullscreen);
     let settings = button("Preferências", "emblem-system-symbolic");
     header.pack_end(&settings);
-    window.set_titlebar(Some(&header));
+    if window.titlebar().is_none() {
+        window.set_titlebar(Some(&header));
+    }
     let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 12);
     sidebar.set_width_request(230);
