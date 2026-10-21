@@ -11,3 +11,6 @@ Todas as etapas integram o escopo 1.0. Hardware e AppImage em ambiente separado 
 Corrigir os 12 achados da revisão independente: endpoint ONVIF e fonte única de URL; cadastro em seções com feedback fixo; editor por clique/teclado, reflow não destrutivo e desfazer; erros locais; navegação/foco/Views adaptáveis; PTZ acessível com parada segura. Validar modelo/persistência, testes GTK reais com janelas pequenas/grandes e regressões de mídia/ONVIF; reconstruir AppImage. Somente commits locais.
 
 Revisão implementada na prévia 0.1.1. Evidências e limitações em UI_REVIEW.md, TESTING.md e PROGRESS.md; homologação H01/H02 continua pendente.
+
+## Ajustes de formulário e conexões (0.1.2)
+Compactar feedback vazio, remover mensagem Pronto e alinhar Views. Adicionar tipo de fonte persistido com validação e opções específicas, demuxers MJPEG explícitos e JPEG periódico cancelável. Validar compatibilidade de JSON legado, decodificação nativa, GTK com opções/erro e alinhamento; atualizar AppImage e commits locais.

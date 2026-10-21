@@ -8,4 +8,4 @@
 - [PLAN](PLAN.md), [TASKS](TASKS.md), [PROGRESS](PROGRESS.md), [FEATURES](FEATURES.md): continuidade e evidências.
 - [Especificação original](SPECIFICATION.md), [ADR inicial](adr/0001-initial-architecture.md).
 
-- [Revisão UI/UX 0.1.1 e capturas](UI_REVIEW.md)
+- [Revisões UI/UX e capturas (0.1.1–0.1.2)](UI_REVIEW.md)

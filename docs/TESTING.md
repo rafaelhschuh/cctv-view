@@ -24,3 +24,9 @@ As fixtures sample.ts e sample.jpg são geradas com fontes sintéticas lavfi, se
 ## Aceitação física pendente
 
 Registrar modelo/firmware, URL sanitizada, transporte, codecs/perfis, driver, CPU/RSS/descartes e resultado para 4×1080p, 9×720p e 16 painéis. Avaliar recuperação de rede, drift A/V, VA-API, Stop ao perder foco, presets reais, Wayland, HiDPI e leitor de tela. AppImage deve ser executado em VM/computador separado compatível com Ubuntu 24.04. Tudo isso permanece NOT VERIFIED até haver evidência; não generalizar os resultados sintéticos de 320×180 para essas cargas.
+
+## Tipos de conexão e acabamento 0.1.2
+
+A suíte padrão inclui validação de esquema/intervalo, roundtrip dos defaults de câmera legada e `explicit_mjpeg_formats_and_snapshot_refresh`. Este último recebe frames reais dos demuxers multipart e MJPEG contínuo e verifica que JPEG faz três requisições no intervalo, sem backoff no sucesso, permanecendo Playing e cancelando novas requisições após shutdown.
+
+O teste GTK mede a distância entre área de abas e Salvar com feedback vazio, confirma que o rodapé reaparece no erro de timeout, alterna as opções MJPEG/JPEG, salva tipo/intervalo e verifica linhas de Views com mesma altura (badges e nomes longos). Captura opcional inclui conexão, opções de cada formato, erro de rodapé e lista alinhada. A captura aguarda um render node de WidgetPaintable antes de exportar, evitando uma corrida com o frame GTK. As capturas não equivalem a validação de leitor de tela ou hardware físico.

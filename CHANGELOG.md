@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 — 2026-10-21
+
+- Rodapé do cadastro compacto: feedback vazio não reserva altura; erros e resultados aparecem quando necessários. Removida a mensagem permanente “Pronto” da janela principal.
+- Seletor RTSP/HTTP(S)/MJPEG/JPEG, instruções e opções avançadas específicas. RTSP configura TCP/UDP; MJPEG seleciona multipart ou fluxo contínuo; JPEG configura intervalo real de novas requisições, mantendo a imagem entre atualizações.
+- Tipo de fonte validado/persistido independentemente do serviço ONVIF. Cadastros antigos preservam detecção automática, sem migração destrutiva.
+- Linhas de Views com alturas, subtítulos e menus alinhados; nomes longos permanecem contidos na sidebar.
+- Regressões com decodificação nativa dos dois modos MJPEG, atualização/cancelamento JPEG e opções/rodapé/alinhamento no GTK real; AppImage atualizado.
+
 ## 0.1.1 — 2026-10-21
 
 - Cadastro em abas Conexão/ONVIF/Avançado, feedback fora da rolagem e foco no campo inválido. URL do vídeo define host/porta; endpoint ONVIF é salvo sem depender de consulta e sua alteração invalida perfis/capacidades anteriores.

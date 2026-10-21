@@ -16,7 +16,7 @@ ADR 0001 registra a fronteira Rust/C das bibliotecas nativas, GDK MemoryTexture 
 
 - Auditoria cargo-audit 0.22.2: quick-xml atualizado para 0.42.0 após dois avisos; auditoria final com zero vulnerabilidades/avisos em 255 dependências. Parser reforçado e regressões repetidas.
 - `cargo fmt --all -- --check`, Clippy com `-D warnings`, suíte workspace e release passaram via `scripts/check.sh`.
-- Suíte padrão: 14 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
+- Suíte padrão: 17 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
 - Mídia: quatro sessões H.264/AAC HTTP simultâneas, JPEG, frame BGRA real, descarte, reconexão após EOF e shutdown.
 - `scripts/test-protocols.sh`: HTTP TS, JPEG, MJPEG, HLS, HEVC, RTSP TCP com autenticação; senha errada, porta fechada e TLS não confiável rejeitados. SOAP autenticado validou informações, capacidades, perfil/URI, movimento/Stop e presets.
 - Descoberta: teste UDP local valida resposta correlacionada, deduplicação e recusa de endereço inválido/resposta não relacionada.
@@ -39,3 +39,13 @@ Próxima ação: executar H01 na máquina/câmeras de referência, registrar mat
 Os 12 achados iniciais e três regressões apontadas na segunda revisão crítica foram corrigidos. Cadastro em abas e feedback fixo; endpoint ONVIF independente da consulta, invalidando dispositivo antigo; destino derivado da URL; editor com inserção por clique/teclado, reflow sem perda, undo e erro local; menus por View, indicadores e sidebar adaptativa; foco por Enter/menu e retorno visível; rótulos acessíveis e PTZ com ativação limitada. Favoritar outra View preserva monitoramento; duplicar limpa foco; referências de foco inválidas são descartadas.
 
 A regressão GTK ampliada passou com consulta SOAP de dois perfis, persistência, editor, janelas pequenas/grandes, favoritos/ordem/exclusão, movimento seguido de Stop e liberação do estado. Capturas e rastreabilidade em UI_REVIEW.md. Checks padrão passaram e o AppImage foi atualizado para 0.1.1. O pacote final iniciou/encerrou por extração no Xvfb, sem Gtk-WARNING/CRITICAL/panic; SHA256SUMS conferido. A revisão final somente leitura confirmou os três ajustes adicionais sem novos achados nesses pontos. Os testes de Secret Service e sink PulseAudio da entrega anterior continuam registrados; não foram repetidos porque os adaptadores não mudaram. Logs adicionais efêmeros: /tmp/cctv-ux-check.log, /tmp/cctv-ux-tests.log, /tmp/cctv-ux-gtk.log, /tmp/cctv-ux-appimage-build.log e /tmp/cctv-ux-appimage-smoke.log. As limitações de homologação física permanecem.
+
+## Conexões e acabamento 0.1.2
+
+Rodapé do cadastro reduzido ao conteúdo: feedback vazio fica oculto e erros/resultados reaparecem. A mensagem permanente Pronto foi removida. Views têm linhas/subtítulos de altura consistente, menus centralizados e nomes longos contidos, usando o fundo do tema nativo.
+
+O seletor RTSP/HTTP(S)/MJPEG/JPEG persiste o tipo separado de ONVIF e controla os grupos de opções avançadas. RTSP expõe TCP/UDP; HTTP(S) mantém autodetecção e TLS validado; MJPEG escolhe multipart ou contínuo; JPEG configura atualização de 200–60000 ms. O shim libav força os demuxers de imagem, finaliza cada snapshot e o worker agenda novas requisições sem backoff no sucesso, preservando o frame e cancelando a espera ao encerrar. Novos campos serde têm defaults compatíveis; roundtrip de JSON legado testado, sem migração SQL destrutiva.
+
+Passaram os 17 testes padrão e a regressão GTK ampliada. A captura agora aguarda um frame GTK válido, corrigindo uma corrida ocasional de WidgetPaintable. Capturas de conexão, opções JPEG, rodapé de erro e lista com badges/nomes longos foram inspecionadas; veja UI_REVIEW.md. Logs efêmeros desta etapa: /tmp/cctv-types-tests.log, /tmp/cctv-types-gtk.log, /tmp/cctv-types-check.log, /tmp/cctv-types-protocols.log, /tmp/cctv-types-appimage-build.log e /tmp/cctv-types-appimage-smoke.log. Os testes de chaveiro/PulseAudio isolados da primeira entrega não foram repetidos nesta etapa; homologação física permanece em H01/H02.
+
+Validação final 0.1.2: scripts/check.sh (fmt/Clippy/testes/release) e scripts/test-protocols.sh passaram. AppImage 0.1.2 gerado, inicializado/encerrado por extração no Xvfb com banco temporário, sem Gtk-WARNING/CRITICAL/panic; SHA256SUMS conferido. Somente commits locais, sem push/PR. Próxima ação de homologação permanece H01/H02.

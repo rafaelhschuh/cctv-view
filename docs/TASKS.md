@@ -20,3 +20,5 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | UX02 | Editor acessível e não destrutivo / core,ui | UX01 | adicionar por clique/teclado/DnD, reflow/undo, erro local, nome legível | DONE |
 | UX03 | Navegação, foco, Views e PTZ / ui | revisão crítica | ações próximas, vazio acionável, sidebar adaptativa, controles acessíveis e pulso limitado | DONE |
 | UX04 | Validar e empacotar revisão / tests,docs,packaging | UX01–UX03 | fmt/Clippy/testes/release, GTK pequeno/grande, AppImage e commits locais | DONE |
+| UX05 | Compactar rodapé, remover Pronto e alinhar Views / ui | UX04 | screenshot e regressão GTK com nomes longos, badges e erro | DONE |
+| M02 | Tipos RTSP/HTTP(S)/MJPEG/JPEG e opções / core,storage,media,ui | UX05 | formatos explícitos, JPEG periódico/cancelamento, JSON legado, GTK e AppImage | DONE |

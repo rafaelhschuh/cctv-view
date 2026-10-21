@@ -33,3 +33,19 @@ A segunda revisão encontrou três regressões, também corrigidas: consulta ONV
 ![Editor com nome legível e ações de inserção](screenshots/editor-small.png)
 
 Capturas mostram widgets no tema instalado; não substituem testes humanos. Leitor de tela/Orca, arrasto físico, Wayland/HiDPI, motor PTZ, VA-API e câmeras reais continuam NOT VERIFIED. Ver TESTING.md e FEATURES.md para reprodução e limites. AppImage e checksum ficam em dist/; somente commits locais.
+
+## Ajustes solicitados — 0.1.2
+
+- Rodapé: a área vazia de feedback foi removida do cálculo de altura; Cancelar/Salvar ficam junto das abas. A regressão GTK mede o intervalo e confirma erro de timeout visível sem fechar o formulário.
+- Tela principal: removido o texto permanente “Pronto”. A área de status fica oculta sem erros reais.
+- Conexões: seletor RTSP/HTTP(S)/MJPEG/JPEG com opções avançadas e instruções específicas. Persistência e validação por tipo, demuxers explícitos para MJPEG e renovação periódica de JPEG no player nativo; cadastros antigos mantêm Auto.
+- Views: linhas com altura uniforme, subtítulos reservados e menus centralizados; sem rolagem horizontal, nomes longos truncados e fundo do tema nativo.
+- Evidência: 17 testes padrão, incluindo formatos MJPEG, intervalo/cancelamento JPEG e JSON legado; regressão GTK com seleção/opções, persistência, rodapé normal/erro e linhas uniformes. Capturas inspecionadas. Hardware e tecnologias assistivas seguem os limites de FEATURES.md.
+
+![Cadastro compacto e tipo de conexão](screenshots/connection-types.png)
+
+![Opções específicas de JPEG](screenshots/jpeg-options.png)
+
+![Lista de Views alinhada](screenshots/views-aligned.png)
+
+Pacote 0.1.2: checks, matriz de protocolos e smoke de inicialização/encerramento do AppImage passaram; checksum conferido. Sem push.

@@ -1,13 +1,13 @@
 # Matriz de funcionalidades e validação
 
-**0.1.1, prévia funcional. Não é uma declaração de homologação 1.0.** Código integrado e verificação local são separados de testes físicos. A especificação integral permanece em SPECIFICATION.md.
+**0.1.2, prévia funcional. Não é uma declaração de homologação 1.0.** Código integrado e verificação local são separados de testes físicos. A especificação integral permanece em SPECIFICATION.md.
 
 | Requisito | Implementação e evidência | Limite / estado de homologação |
 |---|---|---|
 | GTK4 nativo e tema | Janela real em Zorin 18, teste GTK/Xvfb e PNG inspecionado | Tema escuro, Wayland, HiDPI e leitor de tela: NOT VERIFIED |
-| Câmeras CRUD | Cadastro em abas, destino derivado da URL, endpoint ONVIF salvo sem consulta/invalidação, transporte/timeout/áudio/hardware/chaveiro; SQLite e GTK testados | Hardware de câmera: NOT VERIFIED |
+| Câmeras CRUD | Cadastro em abas com rodapé compacto, tipos RTSP/HTTP(S)/MJPEG/JPEG, opções específicas, destino derivado da URL, endpoint ONVIF salvo sem consulta/invalidação, transporte/timeout/áudio/hardware/chaveiro; SQLite e GTK testados | Hardware de câmera: NOT VERIFIED |
 | RTSP | H.264 TCP autenticado no simulador; senha errada e indisponibilidade testadas | UDP e fabricantes: NOT VERIFIED |
-| HTTP/JPEG/MJPEG/HLS/HEVC | Frames reais recebidos por cada protocolo/formato local | Variantes de fabricante: NOT VERIFIED |
+| HTTP/JPEG/MJPEG/HLS/HEVC | Frames reais locais; modos explícitos MJPEG multipart/contínuo e JPEG periódico/cancelável testados | Variantes de fabricante: NOT VERIFIED |
 | HTTPS | TLS obrigatório; certificado não confiável rejeitado | Conexão com CA privada em hardware: NOT VERIFIED |
 | ONVIF descoberta | Probe multicast e correlação; integração UDP local valida endpoints e deduplicação | Multicast em rede física/VLAN: NOT VERIFIED |
 | ONVIF perfis/URI | GetDeviceInformation, GetCapabilities, GetProfiles, GetStreamUri em servidor autenticado | Media1; Media2 exclusivo e HTTP Digest não implementados |
