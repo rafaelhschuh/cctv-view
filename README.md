@@ -2,7 +2,7 @@
 
 Aplicativo Linux nativo para monitoramento de câmeras IP, em Rust, GTK 4 e FFmpeg/libav. Interface em português e tema do sistema, com prioridade para Zorin OS 18 x86_64.
 
-A versão **0.1.2** integra cadastro de câmeras, reprodução multistream, Views persistentes, editor visual, foco, zoom digital, áudio exclusivo, descoberta ONVIF, perfis, PTZ e presets. É uma versão inicial: validação em câmeras físicas, drivers VA-API e em outro computador permanece pendente. Consulte a [matriz de validação](docs/FEATURES.md) antes de usar em operação crítica.
+A versão **0.1.3** integra cadastro de câmeras, reprodução multistream, Views persistentes, editor visual, foco, zoom digital, áudio exclusivo, descoberta ONVIF, perfis, PTZ e presets. É uma versão inicial: validação em câmeras físicas, drivers VA-API e em outro computador permanece pendente. Consulte a [matriz de validação](docs/FEATURES.md) antes de usar em operação crítica.
 
 ## Executar
 

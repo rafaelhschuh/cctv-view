@@ -30,3 +30,7 @@ Registrar modelo/firmware, URL sanitizada, transporte, codecs/perfis, driver, CP
 A suíte padrão inclui validação de esquema/intervalo, roundtrip dos defaults de câmera legada e `explicit_mjpeg_formats_and_snapshot_refresh`. Este último recebe frames reais dos demuxers multipart e MJPEG contínuo e verifica que JPEG faz três requisições no intervalo, sem backoff no sucesso, permanecendo Playing e cancelando novas requisições após shutdown.
 
 O teste GTK mede a distância entre área de abas e Salvar com feedback vazio, confirma que o rodapé reaparece no erro de timeout, alterna as opções MJPEG/JPEG, salva tipo/intervalo e verifica linhas de Views com mesma altura (badges e nomes longos). Captura opcional inclui conexão, opções de cada formato, erro de rodapé e lista alinhada. A captura aguarda um render node de WidgetPaintable antes de exportar, evitando uma corrida com o frame GTK. As capturas não equivalem a validação de leitor de tela ou hardware físico.
+
+## Lista nativa 0.1.3
+
+O teste GTK cobre uma View sem indicadores e várias com favorito/nome longo, verifica alturas uniformes de até 48 px, seleção da View atual, ativação da segunda linha e preservação do foco nessa linha. `CCTV_TEST_DARK=1` ativa a preferência GTK de tema escuro para repetir o teste e as capturas. A captura 14-single-view reproduz o caso da imagem reportada. Não substitui teste humano de leitor de tela/Wayland/HiDPI.

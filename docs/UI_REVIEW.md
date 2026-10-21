@@ -49,3 +49,13 @@ Capturas mostram widgets no tema instalado; não substituem testes humanos. Leit
 ![Lista de Views alinhada](screenshots/views-aligned.png)
 
 Pacote 0.1.2: checks, matriz de protocolos e smoke de inicialização/encerramento do AppImage passaram; checksum conferido. Sem push.
+
+## Correção da regressão da lista — 0.1.3
+
+A captura do usuário revelou que a reserva de subtítulo e a altura de 60 px da versão 0.1.2 tornaram um item simples excessivamente alto. Esse tratamento foi removido. Agora há uma única ListBoxRow nativa selecionável com nome, indicadores opcionais e menu sem moldura; favorita/inicial não criam linha extra. Ativar uma View preserva o foco no item. A seleção abrange também a área do menu, sem botão colorido separado.
+
+A regressão GTK cobre uma View simples, várias Views, nome longo, favorita, seleção e ativação da segunda linha com foco preservado; confere altura uniforme de até 48 px. Capturas em temas claro e escuro inspecionadas. Isso substitui a proposta visual anterior para a lista; não muda os modelos ou serviços de reprodução.
+
+![Uma View no tema escuro, sem altura vazia](screenshots/view-single-dark.png)
+
+![Lista compacta com menu e favorita na mesma linha](screenshots/views-compact-dark.png)

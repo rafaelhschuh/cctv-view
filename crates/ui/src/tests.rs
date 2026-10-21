@@ -76,6 +76,11 @@ fn capture(root: &impl IsA<gtk::Window>, name: &str) {
 #[ignore = "requires GTK display; run under xvfb-run as documented"]
 fn native_crud_editor_and_focus() {
     gtk::init().unwrap();
+    if std::env::var_os("CCTV_TEST_DARK").is_some() {
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_application_prefer_dark_theme(true);
+    }
     let app = gtk::Application::builder()
         .application_id("br.dev.schuh.cctv-view.tests")
         .build();
@@ -405,7 +410,14 @@ fn native_crud_editor_and_focus() {
     assert_eq!(s.current.borrow().as_deref(), Some(copy_id.as_str()));
     assert!(s.preferences.borrow().initial_view.is_none());
     assert!(Store::open(&path).unwrap().cameras().unwrap().len() == 1);
-    // Uniform rows and left alignment, including badges and a long ellipsized name.
+    s.views.borrow_mut()[0].favorite = false;
+    Store::open(&path)
+        .unwrap()
+        .save_view(&s.views.borrow()[0])
+        .unwrap();
+    refresh_sidebar(&s);
+    capture(&s.window, "14-single-view");
+    // Compact single-line rows, including badges and a long ellipsized name.
     for (i, name) in [
         "Garagem",
         "Pátio e portões externos — nome muito longo para a lista lateral",
@@ -432,6 +444,21 @@ fn native_crud_editor_and_focus() {
         .collect();
     assert_eq!(rows.len(), 4);
     assert!(rows.iter().all(|r| r.height() == rows[0].height()));
+    assert!(
+        rows.iter().all(|r| r.height() <= 48),
+        "Sidebar rows must stay compact"
+    );
+    let selected = s.view_list.selected_row().unwrap();
+    assert_eq!(selected.index(), 0);
+    let garage = s.view_list.row_at_index(1).unwrap();
+    assert!(garage.grab_focus());
+    s.view_list.emit_by_name::<()>("row-activated", &[&garage]);
+    assert!(
+        garage.is_focus(),
+        "Activating a View must preserve keyboard focus on its row"
+    );
+    assert_eq!(active_view(&s).unwrap().name, "Garagem");
+    assert_eq!(s.view_list.selected_row().unwrap().index(), 1);
     ptz_activation_is_bounded(&s);
     s.window.close();
     jobs::flush_preferences();

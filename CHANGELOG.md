@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 — 2026-10-21
+
+- Corrigida a regressão de densidade da lista de Views: removidos altura fixa de 60 px, subtítulo vazio e botão de seleção separado.
+- Uma linha nativa selecionável reúne nome, indicadores opcionais e menu sem moldura, preservando foco de teclado ao ativar a View.
+- Conferência GTK com uma/várias Views nos temas claro e escuro e AppImage atualizado.
+
 ## 0.1.2 — 2026-10-21
 
 - Rodapé do cadastro compacto: feedback vazio não reserva altura; erros e resultados aparecem quando necessários. Removida a mensagem permanente “Pronto” da janela principal.

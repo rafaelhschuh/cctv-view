@@ -162,8 +162,8 @@ fn build(
     title.add_css_class("heading");
     sidebar.append(&title);
     let view_list = gtk::ListBox::new();
-    view_list.add_css_class("background");
-    view_list.set_selection_mode(gtk::SelectionMode::None);
+    view_list.add_css_class("navigation-sidebar");
+    view_list.set_selection_mode(gtk::SelectionMode::Single);
     let scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
         .hscrollbar_policy(gtk::PolicyType::Never)
@@ -269,6 +269,19 @@ fn build(
             }
         }
         glib::ControlFlow::Continue
+    });
+    let weak_state = Rc::downgrade(&state);
+    state.view_list.connect_row_activated(move |_, row| {
+        let Some(s) = weak_state.upgrade() else {
+            return;
+        };
+        let view = s.views.borrow().get(row.index() as usize).cloned();
+        if let Some(view) = view {
+            *s.current.borrow_mut() = Some(view.id);
+            s.focus.borrow_mut().take();
+            s.view_list.select_row(Some(row));
+            render(&s);
+        }
     });
     let s = state.clone();
     back.connect_clicked(move |_| {
@@ -494,63 +507,42 @@ fn refresh_sidebar(s: &Shared) {
     }
     let views = s.views.borrow().clone();
     for (index, v) in views.iter().enumerate() {
-        let row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-        let select = gtk::Button::new();
-        select.set_hexpand(true);
-        select.set_height_request(60);
-        select.set_valign(gtk::Align::Center);
-        select.set_tooltip_text(Some(&v.name));
-        let content = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        content.set_valign(gtk::Align::Center);
-        content.set_hexpand(true);
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let name = gtk::Label::new(Some(&v.name));
         name.set_xalign(0.);
+        name.set_hexpand(true);
         name.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        name.set_max_width_chars(20);
-        content.append(&name);
-        let mut badges = vec![];
+        name.set_width_chars(1);
+        row.append(&name);
         if v.favorite {
-            badges.push("★ Favorita");
+            let favorite = gtk::Image::from_icon_name("starred-symbolic");
+            favorite.set_pixel_size(16);
+            favorite.set_tooltip_text(Some("Favorita"));
+            row.append(&favorite);
         }
-        if s.preferences.borrow().initial_view.as_ref() == Some(&v.id) {
-            badges.push("Inicial");
+        let initial = s.preferences.borrow().initial_view.as_ref() == Some(&v.id);
+        if initial {
+            let badge = gtk::Label::new(Some("Inicial"));
+            badge.add_css_class("dim-label");
+            row.append(&badge);
         }
-        // Reserve the same subtitle line so names and menus align with or without badges.
-        let subtitle = if badges.is_empty() {
-            " ".to_string()
-        } else {
-            badges.join(" · ")
-        };
-        let label = gtk::Label::new(Some(&subtitle));
-        label.set_xalign(0.);
-        label.add_css_class("dim-label");
-        content.append(&label);
-        select.set_child(Some(&content));
-        select.update_property(&[gtk::accessible::Property::Label(&format!(
-            "Abrir View {}",
-            v.name
-        ))]);
-        if s.current.borrow().as_ref() == Some(&v.id) {
-            select.add_css_class("suggested-action");
-        }
-        let s2 = s.clone();
-        let id = v.id.clone();
-        select.connect_clicked(move |_| {
-            *s2.current.borrow_mut() = Some(id.clone());
-            s2.focus.borrow_mut().take();
-            refresh(&s2);
-        });
-        row.append(&select);
         let actions = views::menu(s, v, index);
+        actions.set_has_frame(false);
         actions.set_valign(gtk::Align::Center);
-        actions.set_size_request(36, 36);
         row.append(&actions);
         let item = gtk::ListBoxRow::new();
-        item.set_activatable(false);
-        item.set_selectable(false);
         item.set_child(Some(&row));
-        item.set_margin_bottom(4);
+        item.set_tooltip_text(Some(&v.name));
+        item.update_property(&[gtk::accessible::Property::Label(&format!(
+            "Abrir View {}{}{}",
+            v.name,
+            if v.favorite { ", favorita" } else { "" },
+            if initial { ", inicial" } else { "" }
+        ))]);
         s.view_list.append(&item);
+        if s.current.borrow().as_ref() == Some(&v.id) {
+            s.view_list.select_row(Some(&item));
+        }
     }
 }
 #[cfg(test)]

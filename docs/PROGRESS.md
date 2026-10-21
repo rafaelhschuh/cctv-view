@@ -49,3 +49,11 @@ O seletor RTSP/HTTP(S)/MJPEG/JPEG persiste o tipo separado de ONVIF e controla o
 Passaram os 17 testes padrão e a regressão GTK ampliada. A captura agora aguarda um frame GTK válido, corrigindo uma corrida ocasional de WidgetPaintable. Capturas de conexão, opções JPEG, rodapé de erro e lista com badges/nomes longos foram inspecionadas; veja UI_REVIEW.md. Logs efêmeros desta etapa: /tmp/cctv-types-tests.log, /tmp/cctv-types-gtk.log, /tmp/cctv-types-check.log, /tmp/cctv-types-protocols.log, /tmp/cctv-types-appimage-build.log e /tmp/cctv-types-appimage-smoke.log. Os testes de chaveiro/PulseAudio isolados da primeira entrega não foram repetidos nesta etapa; homologação física permanece em H01/H02.
 
 Validação final 0.1.2: scripts/check.sh (fmt/Clippy/testes/release) e scripts/test-protocols.sh passaram. AppImage 0.1.2 gerado, inicializado/encerrado por extração no Xvfb com banco temporário, sem Gtk-WARNING/CRITICAL/panic; SHA256SUMS conferido. Somente commits locais, sem push/PR. Próxima ação de homologação permanece H01/H02.
+
+## Correção da lista 0.1.3
+
+A reserva de subtítulo e a altura de 60 px introduzidas em 0.1.2 pioraram a lista de uma única View, conforme captura do usuário. Removidas. ListBoxRow nativa passa a reunir nome, indicadores opcionais e menu sem moldura na mesma linha, com seleção nativa e foco preservado ao ativar. Sem CSS adicional ou mudança em backend. Capturas claro/escuro inspecionadas em UI_REVIEW.md. Teste cobre altura compacta (até 48 px), nome longo, indicadores, seleção e ativação com foco.
+
+Logs desta etapa: /tmp/cctv-list-check.log, /tmp/cctv-list-light.log, /tmp/cctv-list-dark.log, /tmp/cctv-list-appimage-build.log e /tmp/cctv-list-appimage-smoke.log. Próxima homologação permanece H01/H02; somente commits locais.
+
+Validação 0.1.3: scripts/check.sh passou (17 testes padrão, fmt, Clippy e release); regressão GTK repetida em claro e escuro passou, incluindo foco preservado. AppImage gerado e smoke por extração/Xvfb com dados temporários passou; checksum conferido.

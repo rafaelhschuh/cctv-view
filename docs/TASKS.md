@@ -22,3 +22,4 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | UX04 | Validar e empacotar revisão / tests,docs,packaging | UX01–UX03 | fmt/Clippy/testes/release, GTK pequeno/grande, AppImage e commits locais | DONE |
 | UX05 | Compactar rodapé, remover Pronto e alinhar Views / ui | UX04 | screenshot e regressão GTK com nomes longos, badges e erro | DONE |
 | M02 | Tipos RTSP/HTTP(S)/MJPEG/JPEG e opções / core,storage,media,ui | UX05 | formatos explícitos, JPEG periódico/cancelamento, JSON legado, GTK e AppImage | DONE |
+| UX06 | Corrigir regressão de densidade da lista / ui | UX05 | uma linha nativa, indicadores inline, seleção/foco, GTK claro/escuro e AppImage | DONE |

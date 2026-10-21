@@ -14,3 +14,6 @@ Revisão implementada na prévia 0.1.1. Evidências e limitações em UI_REVIEW.
 
 ## Ajustes de formulário e conexões (0.1.2)
 Compactar feedback vazio, remover mensagem Pronto e alinhar Views. Adicionar tipo de fonte persistido com validação e opções específicas, demuxers MJPEG explícitos e JPEG periódico cancelável. Validar compatibilidade de JSON legado, decodificação nativa, GTK com opções/erro e alinhamento; atualizar AppImage e commits locais.
+
+## Correção de densidade da lista (0.1.3)
+Remover a altura fixa e o subtítulo vazio introduzidos em 0.1.2; integrar nome/menu em uma linha GTK selecionável e preservar foco. Validar uma/várias Views com nomes longos e indicadores, temas claro/escuro, seleção/ativação e AppImage; somente commit local.
