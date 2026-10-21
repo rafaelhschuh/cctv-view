@@ -185,3 +185,106 @@ fn real_pcm_output_and_exclusive_mute() {
     assert_eq!(bytes(&a.id), muted, "previous camera stays muted");
     manager.shutdown();
 }
+
+#[test]
+fn explicit_mjpeg_formats_and_snapshot_refresh() {
+    use cctv_core::StreamKind;
+    use std::sync::Mutex;
+    for (kind, multipart) in [
+        (StreamKind::Jpeg, true),
+        (StreamKind::Mjpeg, true),
+        (StreamKind::Mjpeg, false),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let endpoint = format!("http://{}/image", listener.local_addr().unwrap());
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let received = requests.clone();
+        let worker = thread::spawn(move || {
+            let jpeg = include_bytes!("fixtures/sample.jpg");
+            while !flag.load(Ordering::Acquire) {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(1)))
+                        .unwrap();
+                    let mut buf = [0; 2048];
+                    let _ = stream.read(&mut buf);
+                    received.lock().unwrap().push(Instant::now());
+                    let mut body = vec![];
+                    let mime = if kind == StreamKind::Jpeg {
+                        "image/jpeg"
+                    } else if multipart {
+                        "multipart/x-mixed-replace; boundary=frame"
+                    } else {
+                        "video/x-motion-jpeg"
+                    };
+                    if kind == StreamKind::Jpeg {
+                        body.extend_from_slice(jpeg);
+                    } else {
+                        for _ in 0..16 {
+                            if multipart {
+                                write!(body, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n", jpeg.len()).unwrap();
+                            }
+                            body.extend_from_slice(jpeg);
+                            if multipart {
+                                body.extend_from_slice(b"\r\n");
+                            }
+                        }
+                        if multipart {
+                            body.extend_from_slice(b"--frame--\r\n");
+                        }
+                    }
+                    let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+                    let _ = stream.write_all(&body);
+                } else {
+                    thread::sleep(Duration::from_millis(5));
+                }
+            }
+        });
+        let camera = Camera {
+            name: "Explicit image format".into(),
+            stream_url: endpoint,
+            stream_kind: kind,
+            mjpeg_multipart: multipart,
+            snapshot_interval_ms: 200,
+            hardware_decode: false,
+            timeout_ms: 1000,
+            ..Default::default()
+        };
+        let mut manager = SessionManager::default();
+        let session = manager
+            .acquire(&camera, Credentials::default(), true)
+            .unwrap();
+        let started = Instant::now();
+        while started.elapsed() < Duration::from_secs(5) && session.metrics().0 < 3 {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            session.metrics().0 >= 3,
+            "{kind:?} multipart={multipart} must decode multiple real frames"
+        );
+        assert_eq!(session.latest().unwrap().width, 320);
+        if kind == StreamKind::Jpeg {
+            let times = requests.lock().unwrap();
+            assert!(times[2].duration_since(times[0]) >= Duration::from_millis(380));
+            assert!(
+                times[2].duration_since(times[0]) < Duration::from_secs(2),
+                "snapshot must use its interval, not reconnection backoff"
+            );
+            assert!(matches!(session.status(), Status::Playing));
+        }
+        manager.shutdown();
+        thread::sleep(Duration::from_millis(80));
+        let ended = requests.lock().unwrap().len();
+        thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            requests.lock().unwrap().len(),
+            ended,
+            "shutdown cancels refresh/reconnect"
+        );
+        stop.store(true, Ordering::Release);
+        worker.join().unwrap();
+    }
+}

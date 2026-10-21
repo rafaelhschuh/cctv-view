@@ -273,3 +273,30 @@ mod view_order_regressions {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod connection_compatibility {
+    use super::*;
+    use cctv_core::StreamKind;
+    #[test]
+    fn legacy_camera_defaults_preserve_automatic_decode() -> Result<()> {
+        let c = Camera {
+            name: "Legacy".into(),
+            stream_url: "https://camera.test/live".into(),
+            ..Default::default()
+        };
+        let mut legacy = serde_json::to_value(&c)?;
+        for key in ["stream_kind", "snapshot_interval_ms", "mjpeg_multipart"] {
+            legacy.as_object_mut().expect("camera object").remove(key);
+        }
+        let old: Camera = serde_json::from_value(legacy)?;
+        assert_eq!(old.stream_kind, StreamKind::Auto);
+        assert_eq!(old.snapshot_interval_ms, 1000);
+        assert!(old.mjpeg_multipart);
+        old.validate()?;
+        let store = Store::memory()?;
+        store.save_camera(&old)?;
+        assert_eq!(store.cameras()?[0], old);
+        Ok(())
+    }
+}

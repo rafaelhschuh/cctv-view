@@ -1,5 +1,5 @@
 use anyhow::{ensure, Result};
-use cctv_core::{Camera, Credentials, Transport};
+use cctv_core::{Camera, Credentials, StreamKind, Transport};
 use std::{
     collections::HashMap,
     ffi::{c_char, c_int, c_void, CString},
@@ -18,6 +18,7 @@ unsafe extern "C" {
         tcp: c_int,
         timeout_ms: c_int,
         hardware: c_int,
+        input_kind: c_int,
         user: *mut c_void,
         control: extern "C" fn(*mut c_void, c_int) -> c_int,
         video: extern "C" fn(*mut c_void, *const u8, c_int, c_int, c_int, i64),
@@ -128,8 +129,14 @@ impl SessionManager {
             camera.substream_url.as_ref().unwrap_or(&camera.stream_url)
         };
         let key = format!(
-            "{}:{source}:{:?}:{}:{}",
-            camera.id, camera.transport, camera.hardware_decode, camera.timeout_ms
+            "{}:{source}:{:?}:{}:{}:{:?}:{}:{}",
+            camera.id,
+            camera.transport,
+            camera.hardware_decode,
+            camera.timeout_ms,
+            camera.stream_kind,
+            camera.mjpeg_multipart,
+            camera.snapshot_interval_ms
         );
         self.sessions.retain(|_, v| v.strong_count() > 0);
         if let Some(s) = self.sessions.get(&key).and_then(Weak::upgrade) {
@@ -159,7 +166,15 @@ impl SessionManager {
         let weak = Arc::downgrade(&session);
         let tcp = matches!(camera.transport, Transport::Tcp);
         let timeout = camera.timeout_ms;
-        let hardware = camera.hardware_decode;
+        let snapshot = camera.stream_kind == StreamKind::Jpeg;
+        let hardware = camera.hardware_decode && !snapshot;
+        let snapshot_interval = camera.snapshot_interval_ms;
+        let input_kind = match camera.stream_kind {
+            StreamKind::Mjpeg if camera.mjpeg_multipart => 1,
+            StreamKind::Mjpeg => 2,
+            StreamKind::Jpeg => 3,
+            _ => 0,
+        };
         // Worker owns only a Weak, so last consumer dropping immediately cancels I/O via callback.
         thread::Builder::new()
             .name("cctv-decode".into())
@@ -173,7 +188,9 @@ impl SessionManager {
                     if s.cancel.load(Ordering::Acquire) {
                         break;
                     }
-                    s.set_status(Status::Connecting);
+                    if !snapshot || s.latest().is_none() {
+                        s.set_status(Status::Connecting);
+                    }
                     drop(s);
                     // SAFETY: callback and C string live until synchronous decoder returns; callbacks copy pixels.
                     let mut code = unsafe {
@@ -182,6 +199,7 @@ impl SessionManager {
                             tcp as c_int,
                             timeout as c_int,
                             hardware as c_int,
+                            input_kind,
                             &mut callback as *mut _ as *mut c_void,
                             control,
                             video,
@@ -200,6 +218,7 @@ impl SessionManager {
                                 tcp as c_int,
                                 timeout as c_int,
                                 0,
+                                input_kind,
                                 &mut callback as *mut _ as *mut c_void,
                                 control,
                                 video,
@@ -211,17 +230,24 @@ impl SessionManager {
                         s.set_status(Status::Stopped);
                         break;
                     }
-                    attempt += 1;
-                    s.set_status(Status::Reconnecting { attempt, code });
+                    let wait_ms = if snapshot && code == 0 {
+                        attempt = 0;
+                        u64::from(snapshot_interval)
+                    } else {
+                        attempt += 1;
+                        s.set_status(Status::Reconnecting { attempt, code });
+                        1000 * (1u64 << attempt.min(4))
+                    };
                     drop(s);
-                    for _ in 0..(10 * (1u32 << attempt.min(4))) {
+                    let deadline = Instant::now() + Duration::from_millis(wait_ms);
+                    while Instant::now() < deadline {
                         if weak
                             .upgrade()
                             .is_none_or(|s| s.cancel.load(Ordering::Acquire))
                         {
                             return;
                         }
-                        thread::sleep(Duration::from_millis(100));
+                        thread::sleep(Duration::from_millis(25));
                     }
                 }
             })?;

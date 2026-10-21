@@ -70,7 +70,7 @@ static AVCodecContext *open_decoder(AVStream *stream, int hardware) {
 // Returns FFmpeg error codes, never raw URLs/errors that could expose
 // credentials.
 int cctv_decode(const char *url, int tcp, int timeout_ms, int hardware,
-                void *user, Control control, Video video) {
+                int input_kind, void *user, Control control, Video video) {
   int result = 0, vi = -1, ai = -1;
   AVFormatContext *fmt = avformat_alloc_context();
   AVCodecContext *vd = NULL, *ad = NULL;
@@ -100,7 +100,20 @@ int cctv_decode(const char *url, int tcp, int timeout_ms, int hardware,
   av_dict_set(&options, "protocol_whitelist",
               "http,https,tcp,tls,rtsp,rtp,udp,crypto,data", 0);
   av_dict_set(&options, "allowed_extensions", "ALL", 0);
-  result = avformat_open_input(&fmt, url, NULL, &options);
+  // Stable Rust/C contract: 0 autodetect, 1 multipart JPEG, 2 raw MJPEG, 3
+  // snapshot.
+  const char *format_name = input_kind == 1   ? "mpjpeg"
+                            : input_kind == 2 ? "mjpeg"
+                            : input_kind == 3 ? "jpeg_pipe"
+                                              : NULL;
+  const AVInputFormat *input =
+      format_name ? av_find_input_format(format_name) : NULL;
+  if (format_name && !input) {
+    av_dict_free(&options);
+    result = AVERROR_DEMUXER_NOT_FOUND;
+    goto done;
+  }
+  result = avformat_open_input(&fmt, url, input, &options);
   av_dict_free(&options);
   if (result < 0)
     goto done;
@@ -199,6 +212,10 @@ int cctv_decode(const char *url, int tcp, int timeout_ms, int hardware,
             av_usleep(5000);
         }
         video(user, pixels, out_width, out_height, out_width * 4, pts);
+        if (input_kind == 3) {
+          result = 0;
+          goto done;
+        }
       } else {
         int volume = control(user, 1);
         if (volume > 0) {

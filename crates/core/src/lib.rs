@@ -19,6 +19,22 @@ pub enum Protocol {
     Https,
     Onvif,
 }
+/// Video source format, separate from the optional ONVIF control service.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum StreamKind {
+    #[default]
+    Auto,
+    Rtsp,
+    Http,
+    Mjpeg,
+    Jpeg,
+}
+fn default_snapshot_interval() -> u32 {
+    1000
+}
+fn default_multipart() -> bool {
+    true
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MediaProfile {
     pub token: String,
@@ -42,6 +58,12 @@ pub struct Camera {
     pub port: u16,
     pub protocol: Protocol,
     pub stream_url: String,
+    #[serde(default)]
+    pub stream_kind: StreamKind,
+    #[serde(default = "default_snapshot_interval")]
+    pub snapshot_interval_ms: u32,
+    #[serde(default = "default_multipart")]
+    pub mjpeg_multipart: bool,
     pub substream_url: Option<String>,
     pub secret_ref: Option<String>,
     pub manufacturer: String,
@@ -65,6 +87,9 @@ impl Default for Camera {
             port: 554,
             protocol: Protocol::Rtsp,
             stream_url: String::new(),
+            stream_kind: StreamKind::Auto,
+            snapshot_interval_ms: default_snapshot_interval(),
+            mjpeg_multipart: true,
             substream_url: None,
             secret_ref: None,
             manufacturer: String::new(),
@@ -133,6 +158,19 @@ impl Camera {
         }
         Ok(())
     }
+    pub fn validate_source(&self, value: &str) -> Result<()> {
+        validate_stream(value)?;
+        let scheme = url::Url::parse(value)?.scheme().to_string();
+        match self.stream_kind {
+            StreamKind::Rtsp => ensure!(scheme == "rtsp", "Para RTSP, informe uma URL rtsp://."),
+            StreamKind::Http | StreamKind::Mjpeg | StreamKind::Jpeg => ensure!(
+                matches!(scheme.as_str(), "http" | "https"),
+                "Para HTTP(S), MJPEG ou JPEG, informe uma URL http:// ou https://."
+            ),
+            StreamKind::Auto => {}
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> Result<()> {
         ensure!(
             !self.name.trim().is_empty() && self.name.len() <= 160,
@@ -143,9 +181,15 @@ impl Camera {
             "Timeout deve ficar entre 500 e 60000 ms."
         );
         ensure!(self.port > 0, "Porta inválida.");
-        validate_stream(&self.stream_url)?;
+        self.validate_source(&self.stream_url)?;
+        if self.stream_kind == StreamKind::Jpeg {
+            ensure!(
+                (200..=60000).contains(&self.snapshot_interval_ms),
+                "Atualização JPEG deve ficar entre 200 e 60000 ms."
+            );
+        }
         if let Some(s) = &self.substream_url {
-            validate_stream(s)?;
+            self.validate_source(s)?;
         }
         if self.ptz_allowed {
             ensure!(
@@ -465,6 +509,30 @@ mod ux_regressions {
         assert_eq!(v, saved);
         assert!(v.add_camera("C", Some((0, 0))).is_err());
         assert_eq!(v, saved);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod connection_kind_regressions {
+    use super::*;
+    #[test]
+    fn source_kind_and_snapshot_validation() -> Result<()> {
+        let mut c = Camera {
+            name: "Typed source".into(),
+            stream_url: "rtsp://camera.test/live".into(),
+            stream_kind: StreamKind::Rtsp,
+            ..Default::default()
+        };
+        c.validate()?;
+        c.stream_kind = StreamKind::Http;
+        assert!(c.validate().is_err());
+        c.set_stream_url("https://camera.test/snapshot.jpg")?;
+        c.stream_kind = StreamKind::Jpeg;
+        c.validate()?;
+        c.snapshot_interval_ms = 0;
+        assert!(c.validate().is_err());
+        c.snapshot_interval_ms = 1000;
         Ok(())
     }
 }
