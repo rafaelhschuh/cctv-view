@@ -16,7 +16,7 @@ ADR 0001 registra a fronteira Rust/C das bibliotecas nativas, GDK MemoryTexture 
 
 - Auditoria cargo-audit 0.22.2: quick-xml atualizado para 0.42.0 após dois avisos; auditoria final com zero vulnerabilidades/avisos em 255 dependências. Parser reforçado e regressões repetidas.
 - `cargo fmt --all -- --check`, Clippy com `-D warnings`, suíte workspace e release passaram via `scripts/check.sh`.
-- Suíte padrão: 18 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
+- Suíte padrão: 22 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
 - Mídia: quatro sessões H.264/AAC HTTP simultâneas, JPEG, frame BGRA real, descarte, reconexão após EOF e shutdown.
 - `scripts/test-protocols.sh`: HTTP TS, JPEG, MJPEG, HLS, HEVC, RTSP TCP com autenticação; senha errada, porta fechada e TLS não confiável rejeitados. SOAP autenticado validou informações, capacidades, perfil/URI, movimento/Stop e presets.
 - Descoberta: teste UDP local valida resposta correlacionada, deduplicação e recusa de endereço inválido/resposta não relacionada.
@@ -65,3 +65,13 @@ Sem credenciais na aba Conexão oculta/desabilita os campos e pula o chaveiro na
 Passaram fmt/Clippy, release, 18 testes padrão e regressão GTK. O teste nativo de desafio HTTP confirma ausência de Authorization no modo anônimo e sucesso ao reativar autenticação. O simulador confirma HTTPS autoassinado recusado por padrão e aceito com exceção explícita em TS/HLS/JPEG e SOAP, seguido de nova recusa padrão. GTK confirma persistência e ignora referências fictícias de chaveiro no modo público. Capturas inspecionadas em UI_REVIEW.md.
 
 AppImage 0.1.4 gerado e smoke por extração/Xvfb com banco temporário passou; checksum conferido. Logs efêmeros: /tmp/cctv-access-check.log, /tmp/cctv-access-tests.log, /tmp/cctv-access-clippy.log, /tmp/cctv-access-gtk.log, /tmp/cctv-access-protocols.log, /tmp/cctv-access-appimage-build.log e /tmp/cctv-access-appimage-smoke.log. Os testes de chaveiro/sink reais isolados da primeira entrega não foram repetidos; homologação física continua H01/H02. Somente commits locais, sem push/PR.
+
+## Dashboard, apresentação, CLI e senha 0.2.0
+
+Duplo clique alterna foco e X flutuante substitui a faixa extra. Apresentação oculta cabeçalho/lateral/barras e remove margem exterior vazia dos painéis. Snapshot aplica clipping arredondado antes e depois do primeiro frame. Editor 12×12 adiciona regiões por desenho, tamanho inicial, presets proporcionais, DnD, resize e contraste; undo/cancelamento e colisão preservam os dados. Conversão de View antiga ocorre só no rascunho; erros mantêm a grade original.
+
+Senha do aplicativo foi confirmada pelo usuário como bloqueio de acesso: hash/salt PBKDF2 em SQLite, configuração/alteração/remoção com senha atual, gate inicial e Bloquear agora com sessões encerradas. Verificação em worker e guarda contra callback tardio de janela fechada. CLI analisa antes do GTK, lista metadados mínimos sem display e abre biblioteca/View/fullscreen; listagens protegidas, senha por stdin e erro de senha antes de inicializar GUI. ADR 0002 registra decisão e limite de proteção da interface sem criptografia de arquivos.
+
+Passaram scripts/check.sh (fmt, Clippy, 22 testes padrão e release), regressão GTK escura com desenho 4×3/resize 5×4/undo/colisão, foco/X/fullscreen e senha errada/correta. Testes de storage confirmam salts diferentes, ausência de plaintext e alteração/remoção; integração CLI confirma headless e autenticação. AppImage 0.2.0 foi gerado e validou help/version/listagem sem display, recusa sem senha, desbloqueio por pipe, recusa de senha errada e abertura GUI da View Script Inicial em fullscreen com encerramento automático. Checksum conferido; sem Gtk-WARNING/CRITICAL/panic. Auditoria cargo-audit da base local: zero vulnerabilidades/avisos.
+
+Capturas persistentes em UI_REVIEW.md. Logs efêmeros: /tmp/cctv-dashboard-check.log, /tmp/cctv-dashboard-tests.log, /tmp/cctv-dashboard-gtk.log, /tmp/cctv-dashboard-appimage-build.log, /tmp/cctv-dashboard-appimage-smoke.log e /tmp/cctv-dashboard-audit.json. O smoke de CLI usou somente biblioteca e senha fictícias em /tmp/cctv-dashboard-cli-package; não alterou a biblioteca do usuário. Os testes de chaveiro/áudio e protocolos da entrega anterior mantêm a evidência; adaptadores não mudaram. Próxima homologação permanece H01/H02. Somente commits locais, sem push/PR.

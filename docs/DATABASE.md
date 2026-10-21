@@ -15,3 +15,5 @@ O segredo nunca integra o JSON Camera. libsecret guarda uma tupla usuário/senha
 A partir de 0.1.2, Camera inclui stream_kind, snapshot_interval_ms e mjpeg_multipart. Os defaults serde preservam JSONs anteriores como Auto/1000/true; roundtrip legado testado. O esquema SQL continua na migração 1 e não apaga/regrava registros para introduzir esses campos.
 
 Em 0.1.4, no_credentials (padrão false) e tls_verify (padrão true) são persistidos no JSON Camera. Defaults serde mantêm registros antigos autenticados conforme a referência existente e certificados validados. No modo anônimo, a referência ao chaveiro é preservada sem carregá-la; somente a opção explícita de remoção a apaga.
+
+Em 0.2.0, settings.app_lock contém versão 1, salt aleatório de 16 bytes e hash de 32 bytes PBKDF2-HMAC-SHA256 (600.000 iterações). Não contém senha legível. Criar/alterar/remover usa transação IMMEDIATE com verificação da senha atual. Ausência do registro desativa o bloqueio; registro inválido falha fechado. Esquema SQL permanece versão 1. Grades 12×12 usam os campos de geometria existentes.

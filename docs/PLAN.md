@@ -20,3 +20,12 @@ Remover a altura fixa e o subtítulo vazio introduzidos em 0.1.2; integrar nome/
 
 ## Acesso e certificado (0.1.4)
 Adicionar Sem credenciais em Conexão e validação de certificado configurável em Avançado. Persistir com defaults compatíveis, aplicar no player/ONVIF/PTZ, preservar segredo sem acessá-lo no modo público, validar HTTPS por padrão e com exceção explícita. Regressões GTK, JSON legado e simulador HTTPS/SOAP; atualizar AppImage e commits locais.
+
+## Dashboard, apresentação, CLI e senha (0.2.0)
+- Alternar foco por duplo clique, saída X flutuante e tela cheia somente com streams; corrigir clipping das bordas.
+- Editor 12×12 com painéis personalizados, seleção por retângulo, DnD, resize, contraste e presets proporcionais; preservar Views antigas e undo/cancelamento.
+- CLI para abrir View/tela cheia/biblioteca específica e listar dados sem GUI.
+- Senha do aplicativo confirmada pelo usuário: hash com salt, configuração/alteração/remoção, bloqueio inicial e imediato, CLI protegida e senha via stdin.
+- Validar modelos, persistência e autenticação, GTK real/escuro/pequeno, CLI headless/erro e AppImage. Somente commits locais.
+
+Entrega 0.2.0 implementada e verificada localmente; evidências em PROGRESS.md, TESTING.md e UI_REVIEW.md. H01/H02 continuam pendentes.

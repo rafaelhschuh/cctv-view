@@ -9,3 +9,6 @@
 - [Especificação original](SPECIFICATION.md), [ADR inicial](adr/0001-initial-architecture.md).
 
 - [Revisões UI/UX e capturas (0.1.1–0.1.2)](UI_REVIEW.md)
+
+- [CLI de inicialização e scripts](CLI.md)
+- [ADR 0002 — Bloqueio e CLI](adr/0002-application-lock-and-cli.md)

@@ -42,3 +42,11 @@ A regressão GTK marca Sem credenciais com usuário preenchido, verifica os camp
 O simulador de protocolos testa certificado autoassinado recusado por padrão, vídeo TS/HLS/JPEG aceito com --no-verify-tls e nova recusa sem a flag; ONVIF HTTPS também é recusado por padrão e aceito explicitamente. A probe pública usa --no-credentials com Credentials não vazio fornecido pelo chamador. Esses flags pertencem somente aos executáveis de teste; no aplicativo, as opções são armazenadas por câmera. Capturas 02-camera-connection e 15-tls-options registram os controles no GTK real.
 
 `anonymous_mode_never_answers_auth_challenge` recebe Credentials não vazio e verifica que um desafio HTTP 401/Basic não recebe Authorization no modo anônimo. Como controle, as mesmas credenciais autenticam e recebem um frame ao desativar o modo. Suíte padrão atual: 18 testes.
+
+## Dashboard, apresentação, CLI e senha 0.2.0
+
+Core verifica escala proporcional 2×2 → 12×12, preservação de IDs/proporção, preset principal 8×8 + menores e rejeição de perda/colisão. Storage verifica ausência de plaintext, salt diferente na mesma senha, senha errada, alteração e remoção com atual. CLI tem parser e integração de processo sem DISPLAY/WAYLAND_DISPLAY: help/listagem, bloqueio, senha via pipe e recusa da incorreta.
+
+GTK: duplo clique entra/sai de foco, X flutuante, apresentação oculta sidebar/header/barras; captura real com textura e clipping. No editor, gesto de desenho cria painel 4×3, alça aumenta para 5×4, undo restaura, colisão é recusada e cancelamento preserva SQLite. Configuração de senha, bloqueio com streams parados e tentativa incorreta/correta são exercitados; captura da tela bloqueada. Testes injetam sinais GTK reais, sem comprovar arrasto humano/Wayland/HiDPI ou homologação de hardware.
+
+Logs efêmeros desta etapa usam /tmp/cctv-dashboard-*. A versão final repete scripts/check.sh, GTK escuro, smoke de CLI/GUI no AppImage e checksum. A suíte padrão totaliza 22 testes; GUI executada separadamente, serviços de áudio/chaveiro mantêm a evidência anterior.

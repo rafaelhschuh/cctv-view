@@ -11,3 +11,5 @@ O frame corrente tem uma única posição substituível por sessão. O GTK cria 
 ONVIF é controle/descoberta; a URI obtida alimenta libav. PTZ usa comandos serializados por janela, geração de movimentos e timeout no dispositivo. Não há servidor de produção, telemetria nem processo FFmpeg por câmera.
 
 O shim C é restrito a APIs nativas libav/PulseAudio e libsecret, compilado por cc/pkg-config. Rust mantém modelos, sessões, cancelamento, segurança de fluxos e interface. Ver ADR 0001 para justificativa e limitações.
+
+A CLI em app é analisada antes de inicializar GTK. Listagens passam pelo bloqueio da biblioteca e retornam somente metadados mínimos; abertura configura LaunchOptions. Instâncias com View/tela cheia/biblioteca explícita são independentes. O gate GTK antecede build/playback; bloqueio de sessão encerra mídia, fecha diálogos e substitui a raiz por autenticação. Ver ADR 0002.

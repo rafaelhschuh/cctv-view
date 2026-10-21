@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-10-21
+
+- Duplo clique alterna foco; X flutuante substitui a faixa de retorno. Tela cheia oculta cabeçalho, sidebar, barras e textos sob os vídeos; remove margens externas vazias da área ocupada pelos painéis. Canvas mantém clipping arredondado antes/depois do primeiro frame.
+- Editor 12×12 com desenho de retângulos, painéis de tamanhos diferentes, DnD, resize e presets proporcionais. Fundos/bordas contrastantes, tamanho inicial configurável e undo. Views antigas são convertidas somente no rascunho; conversões inválidas preservam a grade original.
+- CLI para View por nome/ID, fullscreen, biblioteca específica, listagens JSON sem display, help/version e desbloqueio por stdin.
+- Senha do aplicativo em Preferências: configurar/alterar/remover, bloqueio inicial/imediato e parada das sessões. Apenas hash PBKDF2/salt no SQLite; senha atual obrigatória para mudança/remoção. Listagens protegidas e nenhum argumento de senha.
+- Testes de geometria, hash/salt/mudança, CLI headless e GTK com desenho/resize, foco/apresentação e senha incorreta/correta; AppImage atualizado.
+
 ## 0.1.4 — 2026-10-21
 
 - Opção Validar certificado HTTPS em Avançado, marcada por padrão e configurável por câmera. Aplicada ao player, teste de vídeo, consulta ONVIF e PTZ; certificado autoassinado aceito ao desmarcar, sem alterar o padrão das outras câmeras.

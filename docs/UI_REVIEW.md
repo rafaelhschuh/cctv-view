@@ -69,3 +69,21 @@ GTK verifica alternância dos controles, flags salvas e uso público com referê
 ![Stream pública sem campos de credenciais](screenshots/public-stream.png)
 
 ![Validação de certificado configurável em Avançado](screenshots/certificate-option.png)
+
+## Dashboard, apresentação, CLI e senha — 0.2.0
+
+Duplo clique agora entra/sai de foco. A faixa extra foi removida; um X quadrado flutuante retorna à grade sem deslocar a sidebar ou o vídeo. F11 oculta cabeçalho, lateral e barras das câmeras e expande a área ocupada pelos painéis, preservando geometria relativa. F11/Escape retorna. O clipping arredondado se aplica também à textura decodificada.
+
+O editor usa grade 12×12 com bordas/fundo contrastantes para painéis preenchidos. Arrastar numa região vazia desenha um painel; o seletor associa câmera. Largura/altura iniciais, layouts proporcionais, DnD, alça de resize, propriedades numéricas, undo e cancelamento funcionam sobre o mesmo modelo validado. Views antigas são convertidas no rascunho; se não couberem sem colisão, permanecem na grade original com feedback, sem sobrescrever dados.
+
+Senha do aplicativo em Preferências permite definir/alterar/remover, com senha atual obrigatória nas duas últimas ações. Bloquear agora encerra sessões e mostra o gate. Startup só constrói reprodução após desbloqueio. A CLI abre View/fullscreen/biblioteca e lista metadados sem display, com proteção da biblioteca e desbloqueio por stdin. O bloqueio não criptografa arquivos; ver SECURITY.md.
+
+Evidências: 22 testes padrão, GTK escuro com desenho 4×3, resize 5×4, colisão/undo/cancelamento, foco alternável, modo somente streams e senha incorreta/correta. AppImage 0.2.0: help/version headless, listagem protegida, stdin correto/incorreto e GUI com View/fullscreen, encerramento e checksum passaram. Auditoria RustSec da base local: zero vulnerabilidades/avisos. Compositor real, arrasto humano/Wayland/HiDPI e hardware permanecem nos limites de FEATURES.md.
+
+![Dashboard com painéis de tamanhos diferentes](screenshots/dashboard-custom.png)
+
+![Foco com X sobreposto](screenshots/focus-floating.png)
+
+![Apresentação apenas com o stream](screenshots/streams-fullscreen.png)
+
+![Bloqueio de acesso ao aplicativo](screenshots/application-lock.png)

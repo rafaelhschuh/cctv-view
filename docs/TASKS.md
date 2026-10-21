@@ -24,3 +24,7 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | M02 | Tipos RTSP/HTTP(S)/MJPEG/JPEG e opções / core,storage,media,ui | UX05 | formatos explícitos, JPEG periódico/cancelamento, JSON legado, GTK e AppImage | DONE |
 | UX06 | Corrigir regressão de densidade da lista / ui | UX05 | uma linha nativa, indicadores inline, seleção/foco, GTK claro/escuro e AppImage | DONE |
 | A01 | Streams públicas e certificado configurável / core,storage,media,onvif,ui | M02/UX06 | defaults legados, GTK/SQLite sem chaveiro, TLS default/exceção em vídeo/SOAP e AppImage | DONE |
+| U03 | Foco, apresentação e clipping / ui | UX06 | duplo clique alterna, X sobreposto, fullscreen sem chrome, bordas com frame | DONE |
+| U04 | Dashboard 12×12 / core,ui | U02 | escala legada, presets sem perda, desenho/move/resize e undo/SQLite | DONE |
+| A02 | Senha do aplicativo / storage,ui | confirmação do usuário | hash/salt, senha errada, alteração/remoção, startup e bloqueio imediato | DONE |
+| C01 | CLI de scripts / app,ui,storage | A02/U03 | help/version/list sem display, abertura View/fullscreen, biblioteca protegida/stdin | DONE |
