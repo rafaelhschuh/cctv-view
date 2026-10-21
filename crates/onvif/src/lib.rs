@@ -116,6 +116,10 @@ impl Client {
         if node.find("Fault").is_some() {
             bail!("O dispositivo recusou {operation}. Recurso não suportado, autenticação ou relógio incorreto.");
         }
+        ensure!(
+            node.find("Body").is_some() && node.find(&format!("{operation}Response")).is_some(),
+            "Resposta SOAP incompleta para {operation}."
+        );
         Ok(node)
     }
     pub async fn inspect(&self) -> Result<DeviceInfo> {
@@ -356,7 +360,12 @@ mod tests {
                     }
                 }
                 requests.push(String::from_utf8(request).unwrap());
-                let body="<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\"><s:Body/></s:Envelope>";
+                let operation = if requests.last().unwrap().contains("<op:ContinuousMove") {
+                    "ContinuousMove"
+                } else {
+                    "Stop"
+                };
+                let body=format!("<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\"><s:Body><{operation}Response/></s:Body></s:Envelope>");
                 write!(
                     s,
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

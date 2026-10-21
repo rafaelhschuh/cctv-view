@@ -7,7 +7,7 @@ cctv-core.workspace = true
 anyhow.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros"] }
-quick-xml = "0.39"
+quick-xml = "0.42"
 base64 = "0.22"
 sha1 = "0.10"
 chrono = "0.4"

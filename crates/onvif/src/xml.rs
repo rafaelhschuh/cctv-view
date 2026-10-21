@@ -56,14 +56,16 @@ pub(crate) fn parse(xml: &str) -> Result<Node> {
                     "XML ONVIF excede os limites."
                 );
                 let mut n = Node {
-                    name: String::from_utf8_lossy(e.local_name().as_ref()).into(),
+                    name: e.local_name().as_ref().to_owned(),
                     ..Default::default()
                 };
-                for attr in e.attributes() {
+                for (index, attr) in e.attributes().enumerate() {
+                    ensure!(index < 256, "Atributos XML excedem o limite.");
                     let a = attr?;
                     n.attributes.push((
-                        String::from_utf8_lossy(a.key.local_name().as_ref()).into(),
-                        a.decode_and_unescape_value(reader.decoder())?.into(),
+                        a.key.local_name().as_ref().to_owned(),
+                        a.normalized_value(quick_xml::XmlVersion::Implicit1_0)?
+                            .into(),
                     ));
                 }
                 if empty {
@@ -84,8 +86,7 @@ pub(crate) fn parse(xml: &str) -> Result<Node> {
             }
             Event::Text(e) => {
                 if let Some(n) = stack.last_mut() {
-                    n.text
-                        .push_str(&quick_xml::escape::unescape(&e.xml_content()?)?);
+                    n.text.push_str(&e.xml10_content());
                 }
             }
             Event::DocType(_) => bail!("DTD não permitido."),
@@ -93,7 +94,7 @@ pub(crate) fn parse(xml: &str) -> Result<Node> {
                 let text = if let Some(c) = e.resolve_char_ref()? {
                     c.to_string()
                 } else {
-                    match e.decode()?.as_ref() {
+                    match e.as_ref() {
                         "amp" => "&",
                         "lt" => "<",
                         "gt" => ">",
@@ -112,7 +113,9 @@ pub(crate) fn parse(xml: &str) -> Result<Node> {
         }
     }
     ensure!(stack.len() == 1, "XML ONVIF truncado.");
-    stack.pop().ok_or_else(|| anyhow::anyhow!("XML vazio"))
+    let root = stack.pop().ok_or_else(|| anyhow::anyhow!("XML vazio"))?;
+    ensure!(root.children.len() == 1, "XML deve conter uma raiz única.");
+    Ok(root)
 }
 pub(crate) fn escape(s: &str) -> String {
     quick_xml::escape::escape(s).into_owned()
@@ -127,6 +130,12 @@ mod tests {
         assert_eq!(p.attr("token"), "a&b");
         assert_eq!(p.value("Name"), "Entrada");
         assert!(p.find("PTZConfiguration").is_some());
+        assert!(parse("<a/><b/>").is_err());
+        let too_many = format!(
+            "<a {}/>",
+            (0..257).map(|i| format!("k{i}=\"v\" ")).collect::<String>()
+        );
+        assert!(parse(&too_many).is_err());
         assert!(parse("<!DOCTYPE x SYSTEM 'file:///etc/passwd'><x/>").is_err());
         Ok(())
     }
