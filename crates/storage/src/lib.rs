@@ -1,8 +1,9 @@
+mod archive;
 mod library;
 mod password;
 use anyhow::{ensure, Context, Result};
+pub use archive::{ArchiveCamera, CameraArchive, MAX_ARCHIVE_BYTES};
 use cctv_core::{Camera, Credentials, Preferences, View, APP_ID};
-pub use library::{CameraArchive, PortableCamera, MAX_ARCHIVE_BYTES};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     ffi::{c_char, c_int, CStr, CString},

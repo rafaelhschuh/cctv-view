@@ -11,6 +11,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 directories = "6"
 ring = "0.17"
 url.workspace = true
+base64 = "0.22"
 [build-dependencies]
 cc = "1"
 pkg-config = "0.3"

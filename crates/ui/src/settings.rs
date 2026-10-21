@@ -42,16 +42,15 @@ pub(crate) fn open(s: &Shared) {
 
     let library = forms::page(&notebook, "Biblioteca");
     forms::section(&library, "Transferir câmeras");
-    forms::help(&library,"Exporte seus cadastros e pastas para um arquivo JSON ou importe em outra instalação. A importação adiciona câmeras com novos identificadores, sem substituir as existentes ou alterar suas Views.");
+    forms::help(&library,"Exporte ou importe câmeras e pastas em JSON criptografado, incluindo credenciais, URLs completas e configurações. A importação adiciona cadastros sem substituir os existentes.");
     let export = gtk::Button::with_label("Exportar câmeras…");
     export.set_halign(gtk::Align::Start);
     library.append(&export);
     let import = gtk::Button::with_label("Importar câmeras…");
     import.set_halign(gtk::Align::Start);
     library.append(&import);
-    forms::section(&library, "O que fica fora do arquivo");
-    forms::help(&library,"Usuário, senha, referências ao chaveiro, perfis ONVIF e autorização PTZ não são transferidos. A senha do aplicativo e as Views também não são exportadas.");
-    forms::help(&library,"Parâmetros (?…) e fragmentos (#…) das URLs são removidos para evitar senhas e tokens embutidos. Revise as URLs após importar; canais definidos por parâmetros precisarão ser reconfigurados.");
+    forms::section(&library, "Senha do arquivo");
+    forms::help(&library,"Ao exportar, escolha uma senha para proteger o arquivo. Use a mesma senha para importar. Se o aplicativo tiver uma senha definida, ela também será solicitada antes de editar, clonar ou exportar câmeras.");
     let state = s.clone();
     let parent = d.downgrade();
     export.connect_clicked(move |_| {

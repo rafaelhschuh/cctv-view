@@ -7,12 +7,20 @@ pub fn library(s: &Shared) {
 }
 pub(crate) type LibraryRefresh = Rc<dyn Fn()>;
 pub fn form(s: &Shared, camera: Camera, library: Option<LibraryRefresh>) {
-    form_inner(s, camera, library, false);
+    if s.locked.get() {
+        return;
+    }
+    // A stale/deleted row can still carry camera data; only a blank new form skips authorization.
+    if !camera.name.is_empty() || !camera.stream_url.is_empty() || camera.secret_ref.is_some() {
+        let state = s.clone();
+        auth::confirm_action(s, &s.window, "Visualizar e editar câmera", move || {
+            form_inner(&state, camera, library)
+        });
+    } else {
+        form_inner(s, camera, library);
+    }
 }
-pub(crate) fn clone_form(s: &Shared, camera: Camera, library: Option<LibraryRefresh>) {
-    form_inner(s, camera, library, true);
-}
-fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>, cloned: bool) {
+fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>) {
     let d = gtk::Dialog::builder()
         .transient_for(&s.window)
         .destroy_with_parent(true)
@@ -35,9 +43,6 @@ fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>, clone
     let original = Rc::new(RefCell::new(camera.clone()));
     forms::section(&connection, "Identificação");
     let name = forms::entry(&connection, "Nome", &camera.name);
-    if cloned {
-        forms::help(&connection,"Cópia sem credenciais salvas e sem autorização PTZ. Parâmetros e fragmentos das URLs foram omitidos. Revise se o caminho da URL contém senha ou token antes de salvar.");
-    }
     forms::section(&connection, "Conexão de vídeo");
     let kind =
         gtk::DropDown::from_strings(&["RTSP", "HTTP(S)", "MJPEG", "JPEG — imagem periódica"]);
@@ -262,6 +267,7 @@ fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>, clone
         let loading = Rc::new(Cell::new(false));
         let user = user.clone();
         let feedback = feedback.clone();
+        let password = password.clone();
         let anonymous = anonymous.downgrade();
         Rc::new(move || {
             let Some(choice) = anonymous.upgrade() else {
@@ -275,6 +281,7 @@ fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>, clone
             let loaded = loaded.clone();
             let loading = loading.clone();
             let user = user.clone();
+            let password = password.clone();
             let feedback = feedback.clone();
             let anonymous = anonymous.clone();
             jobs::run(
@@ -285,6 +292,9 @@ fn form_inner(s: &Shared, camera: Camera, library: Option<LibraryRefresh>, clone
                         Ok(c) => {
                             if user.text().is_empty() {
                                 user.set_text(&c.username);
+                            }
+                            if password.text().is_empty() {
+                                password.set_text(&c.password);
                             }
                             *loaded.borrow_mut() = Some(c);
                         }

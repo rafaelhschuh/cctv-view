@@ -21,11 +21,17 @@ fn pump_until(test: impl Fn() -> bool) {
     assert!(test(), "GTK action timed out");
 }
 fn dialog(title: &str) -> gtk::Dialog {
+    pump_until(|| {
+        gtk::Window::list_toplevels()
+            .into_iter()
+            .filter_map(|w| w.downcast::<gtk::Dialog>().ok())
+            .any(|d| d.is_visible() && d.title().as_deref() == Some(title))
+    });
     gtk::Window::list_toplevels()
         .into_iter()
         .filter_map(|w| w.downcast::<gtk::Dialog>().ok())
-        .find(|w| w.title().as_deref() == Some(title))
-        .unwrap_or_else(|| panic!("Dialog not found: {title}"))
+        .find(|d| d.is_visible() && d.title().as_deref() == Some(title))
+        .unwrap()
 }
 fn button_named(root: &impl IsA<gtk::Widget>, text: &str) -> gtk::Button {
     widgets(root)
@@ -558,6 +564,8 @@ fn native_crud_editor_and_focus() {
     password_fields[2].set_text("gtk-fixture-password");
     password_dialog.response(gtk::ResponseType::Accept);
     pump_until(|| Store::open(&path).unwrap().has_app_password().unwrap());
+    eprintln!("GTK: app password configured; verify per-action prompts");
+    camera_action_passwords(&s);
     auth::lock(&s);
     pump_until(|| s.locked.get());
     capture(&s.window, "18-application-locked");
@@ -777,6 +785,24 @@ fn library_and_settings(s: &Shared) {
         Store::open(&s.path).unwrap().save_camera(&c).unwrap();
     }
     *s.cameras.borrow_mut() = Store::open(&s.path).unwrap().cameras().unwrap();
+    assert!(
+        std::env::var_os("CCTV_TEST_PRIVATE_KEYRING").is_some(),
+        "Run with scripts/test-ui.sh: this test uses a disposable Secret Service."
+    );
+    let mut source = s.cameras.borrow()[0].clone();
+    let reference = format!("fixture:{}", cctv_core::id());
+    Vault::store(
+        &reference,
+        &Credentials {
+            username: "fixture-user".into(),
+            password: "fixture-camera-password".into(),
+        },
+    )
+    .unwrap();
+    source.secret_ref = Some(reference);
+    source.no_credentials = false;
+    Store::open(&s.path).unwrap().save_camera(&source).unwrap();
+    *s.cameras.borrow_mut() = Store::open(&s.path).unwrap().cameras().unwrap();
     eprintln!("GTK biblioteca: abrir biblioteca");
     camera::library(s);
     let library = dialog("Biblioteca de câmeras");
@@ -816,36 +842,15 @@ fn library_and_settings(s: &Shared) {
             .iter()
             .any(|c| c.folder.as_deref() == Some("Exteriores"))
     });
-    eprintln!("GTK biblioteca: clonar câmera");
-    button_named(&library, "Clonar câmera sem senha").emit_clicked();
-    pump_until(|| {
-        gtk::Window::list_toplevels().iter().any(|w| {
-            w.clone()
-                .downcast::<gtk::Dialog>()
-                .is_ok_and(|d| d.title().as_deref() == Some("Configurar câmera"))
-        })
-    });
-    let copy_form = dialog("Configurar câmera");
-    assert!(entry_named(&copy_form, "Nome").text().ends_with("(cópia)"));
-    assert!(widgets(&copy_form)
-        .into_iter()
-        .filter_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
-        .all(|e| e.text().is_empty()));
-    copy_form.response(gtk::ResponseType::Cancel);
-    settle();
-    assert_eq!(
-        Store::open(&s.path).unwrap().cameras().unwrap().len(),
-        camera_count
-    );
-    button_named(&library, "Clonar câmera sem senha").emit_clicked();
-    pump_until(|| {
-        gtk::Window::list_toplevels().iter().any(|w| {
-            w.clone()
-                .downcast::<gtk::Dialog>()
-                .is_ok_and(|d| d.title().as_deref() == Some("Configurar câmera"))
-        })
-    });
-    dialog("Configurar câmera").response(gtk::ResponseType::Accept);
+    eprintln!("GTK biblioteca: clonar câmera com credenciais");
+    let original = s
+        .cameras
+        .borrow()
+        .iter()
+        .find(|c| c.id == source.id)
+        .unwrap()
+        .clone();
+    button_named(&library, "Clonar câmera").emit_clicked();
     pump_until(|| s.cameras.borrow().len() == camera_count + 1);
     let copy = s
         .cameras
@@ -854,8 +859,14 @@ fn library_and_settings(s: &Shared) {
         .find(|c| c.name.ends_with("(cópia)"))
         .unwrap()
         .clone();
-    assert!(copy.secret_ref.is_none());
-    assert!(!copy.ptz_allowed);
+    assert_ne!(copy.secret_ref, original.secret_ref);
+    assert_eq!(
+        Vault::get(copy.secret_ref.as_deref().unwrap())
+            .unwrap()
+            .password,
+        "fixture-camera-password"
+    );
+    assert_eq!(copy.stream_url, original.stream_url);
     settle();
     let rows: Vec<_> = widgets(&library)
         .into_iter()
@@ -926,36 +937,29 @@ fn library_and_settings(s: &Shared) {
     capture(&settings, "22-settings-library");
     assert!(button_named(&settings, "Exportar câmeras…").is_visible());
     assert!(button_named(&settings, "Importar câmeras…").is_visible());
+    eprintln!("GTK biblioteca: senha de exportação");
+    button_named(&settings, "Exportar câmeras…").emit_clicked();
+    let export = dialog("Senha da exportação");
+    assert_eq!(
+        widgets(&export)
+            .into_iter()
+            .filter_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+            .count(),
+        2
+    );
+    capture(&export, "25-export-password");
+    export.response(gtk::ResponseType::Cancel);
     let export_path = s.path.with_file_name("cameras-export.json");
-    let archive = cctv_storage::CameraArchive::parse(
-        Store::open(&s.path)
-            .unwrap()
-            .export_cameras()
-            .unwrap()
-            .as_bytes(),
-    )
-    .unwrap();
-    eprintln!("GTK biblioteca: revisar exportação");
-    transfer::export_review(s, &settings, archive);
-    let review = dialog("Revisar exportação");
-    assert!(!button_named(&review, "Escolher arquivo…").is_sensitive());
-    let reviewed = widgets(&review)
-        .into_iter()
-        .find_map(|w| w.downcast::<gtk::CheckButton>().ok())
+    let encrypted = Store::open(&s.path)
+        .unwrap()
+        .export_encrypted("fixture-file-password")
         .unwrap();
-    reviewed.set_active(true);
-    assert!(button_named(&review, "Escolher arquivo…").is_sensitive());
-    entry_named(&review, "URL do stream para exportar").set_text("http://camera.test/public");
-    assert!(!button_named(&review, "Escolher arquivo…").is_sensitive());
-    reviewed.set_active(true);
-    capture(&review, "25-export-review");
-    review.response(gtk::ResponseType::Cancel);
-    eprintln!("GTK biblioteca: gravar arquivo");
+    assert!(!encrypted.contains("fixture-camera-password"));
     transfer::save_file(
         s,
         &settings.downgrade(),
         export_path.clone(),
-        Store::open(&s.path).unwrap().export_cameras().unwrap(),
+        encrypted.clone(),
     );
     pump_until(|| export_path.exists());
     settle();
@@ -966,27 +970,30 @@ fn library_and_settings(s: &Shared) {
         d.response(gtk::ResponseType::Close);
     }
     let added = s.cameras.borrow().len();
-    eprintln!("GTK biblioteca: ler arquivo");
     transfer::read_file(s, &settings.downgrade(), export_path);
+    let decrypt = dialog("Senha do arquivo");
+    let field = widgets(&decrypt)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+        .unwrap();
+    field.set_text("wrong");
+    decrypt.response(gtk::ResponseType::Accept);
     pump_until(|| {
-        gtk::Window::list_toplevels().iter().any(|w| {
-            w.clone()
-                .downcast::<gtk::Dialog>()
-                .is_ok_and(|d| d.title().as_deref() == Some("Revisar importação"))
-        })
+        widgets(&decrypt)
+            .into_iter()
+            .filter_map(|w| w.downcast::<gtk::Label>().ok())
+            .any(|l| l.text() == "Senha do arquivo incorreta ou arquivo alterado.")
     });
+    assert_eq!(s.cameras.borrow().len(), camera_count + 1);
+    field.set_text("fixture-file-password");
+    decrypt.response(gtk::ResponseType::Accept);
     let preview = dialog("Revisar importação");
     capture(&preview, "23-import-preview");
     preview.response(gtk::ResponseType::Cancel);
     assert_eq!(s.cameras.borrow().len(), camera_count + 1);
-    let archive = cctv_storage::CameraArchive::parse(
-        Store::open(&s.path)
-            .unwrap()
-            .export_cameras()
-            .unwrap()
-            .as_bytes(),
-    )
-    .unwrap();
+    let archive =
+        cctv_storage::CameraArchive::decrypt(encrypted.as_bytes(), "fixture-file-password")
+            .unwrap();
     eprintln!("GTK biblioteca: confirmar importação");
     transfer::preview(s, &settings, archive);
     let importing = dialog("Revisar importação");
@@ -1007,5 +1014,79 @@ fn library_and_settings(s: &Shared) {
     notebook.set_current_page(Some(2));
     capture(&settings, "24-settings-security");
     eprintln!("GTK biblioteca: fechar configurações");
+    settings.response(gtk::ResponseType::Close);
+}
+
+fn confirm_app_password(candidate: &str) -> gtk::Dialog {
+    let d = dialog("Confirmar senha do aplicativo");
+    let field = widgets(&d)
+        .into_iter()
+        .find_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+        .unwrap();
+    field.set_text(candidate);
+    d.response(gtk::ResponseType::Accept);
+    d
+}
+fn camera_action_passwords(s: &Shared) {
+    let source = s
+        .cameras
+        .borrow()
+        .iter()
+        .find(|c| c.name == "Portaria de teste")
+        .unwrap()
+        .clone();
+    let mut stale = source.clone();
+    stale.id = cctv_core::id();
+    camera::form(s, stale, None);
+    dialog("Confirmar senha do aplicativo").response(gtk::ResponseType::Cancel);
+    eprintln!("GTK action password: open camera");
+    camera::form(s, source.clone(), None);
+    let blocked = confirm_app_password("wrong");
+    pump_until(|| {
+        widgets(&blocked)
+            .into_iter()
+            .filter_map(|w| w.downcast::<gtk::Label>().ok())
+            .any(|l| l.text() == "Senha incorreta.")
+    });
+    assert!(!gtk::Window::list_toplevels()
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::Dialog>().ok())
+        .any(|d| d.is_visible() && d.title().as_deref() == Some("Configurar câmera")));
+    blocked.response(gtk::ResponseType::Cancel);
+    eprintln!("GTK action password: open camera");
+    camera::form(s, source.clone(), None);
+    confirm_app_password("gtk-fixture-password");
+    let editing = dialog("Configurar câmera");
+    pump_until(|| entry_named(&editing, "Usuário").text() == "fixture-user");
+    assert!(widgets(&editing)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::PasswordEntry>().ok())
+        .any(|p| p.text() == "fixture-camera-password"));
+    editing.response(gtk::ResponseType::Cancel);
+    eprintln!("GTK action password: clone");
+    camera::library(s);
+    let library = dialog("Biblioteca de câmeras");
+    settle();
+    let before = s.cameras.borrow().len();
+    button_named(&library, "Clonar câmera").emit_clicked();
+    let canceled = dialog("Confirmar senha do aplicativo");
+    capture(&canceled, "26-camera-action-password");
+    canceled.response(gtk::ResponseType::Cancel);
+    settle();
+    assert_eq!(s.cameras.borrow().len(), before);
+    button_named(&library, "Clonar câmera").emit_clicked();
+    confirm_app_password("gtk-fixture-password");
+    pump_until(|| s.cameras.borrow().len() == before + 1);
+    library.response(gtk::ResponseType::Close);
+    eprintln!("GTK action password: export");
+    settings::open(s);
+    let settings = dialog("Preferências");
+    button_named(&settings, "Exportar câmeras…").emit_clicked();
+    confirm_app_password("gtk-fixture-password");
+    let exporting = dialog("Senha da exportação");
+    exporting.response(gtk::ResponseType::Cancel);
+    // Every new export must ask again, even after a successful authorization.
+    button_named(&settings, "Exportar câmeras…").emit_clicked();
+    dialog("Confirmar senha do aplicativo").response(gtk::ResponseType::Cancel);
     settings.response(gtk::ResponseType::Close);
 }

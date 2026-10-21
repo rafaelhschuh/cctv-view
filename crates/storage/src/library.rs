@@ -1,9 +1,4 @@
 use super::*;
-use cctv_core::{StreamKind, Transport};
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-
-pub const MAX_ARCHIVE_BYTES: u64 = 8 * 1024 * 1024;
 
 fn folder_name(name: &str) -> Result<String> {
     let name = name.trim();
@@ -93,42 +88,62 @@ impl Store {
         tx.commit()?;
         Ok(())
     }
-    pub fn prepare_camera_clone(&self, id: &str) -> Result<Camera> {
-        let source = self
+    pub fn clone_camera(&mut self, id: &str) -> Result<()> {
+        self.clone_with(id, Vault::get, Vault::store, Vault::delete)
+    }
+    fn clone_with(
+        &mut self,
+        id: &str,
+        mut load: impl FnMut(&str) -> Result<Credentials>,
+        save: impl FnMut(&str, &Credentials) -> Result<()>,
+        delete: impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        // Read the metadata exactly once, before a keyring lookup may block/unlock.
+        let mut camera = self
             .cameras()?
             .into_iter()
             .find(|c| c.id == id)
             .context("A câmera não existe mais.")?;
-        let mut camera = PortableCamera::from_camera(&source)?.into_camera()?;
-        // Keep the suffix within Camera's 160-byte limit, including multibyte names.
-        let mut name = source.name;
-        while name.len() > 147 {
-            name.pop();
+        let credentials = camera.secret_ref.as_deref().map(&mut load).transpose()?;
+        camera.id = cctv_core::id();
+        camera.secret_ref = None;
+        while camera.name.len() > 147 {
+            camera.name.pop();
         }
-        camera.name = format!("{name} (cópia)");
-        Ok(camera)
+        camera.name.push_str(" (cópia)");
+        let archive = CameraArchive::from_records(
+            self.folders()?,
+            vec![ArchiveCamera::new(camera, credentials)],
+        );
+        self.import_with(archive, save, delete)?;
+        Ok(())
     }
-    pub fn export_cameras(&self) -> Result<String> {
-        let archive = CameraArchive {
-            format: "cctv-view-cameras".into(),
-            version: 1,
-            folders: self.folders()?,
-            cameras: self
-                .cameras()?
-                .iter()
-                .map(PortableCamera::from_camera)
-                .collect::<Result<_>>()?,
-        };
-        archive.sanitized_json()
+    pub fn export_encrypted(&self, password: &str) -> Result<String> {
+        self.archive_with(Vault::get)?.encrypt(password)
     }
-    /// Validate the complete archive before starting an atomic additive import.
+    fn archive_with(
+        &self,
+        mut load: impl FnMut(&str) -> Result<Credentials>,
+    ) -> Result<CameraArchive> {
+        let mut cameras = vec![];
+        for mut camera in self.cameras()? {
+            let credentials = camera.secret_ref.as_deref().map(&mut load).transpose()?;
+            camera.secret_ref = None;
+            cameras.push(ArchiveCamera::new(camera, credentials));
+        }
+        Ok(CameraArchive::from_records(self.folders()?, cameras))
+    }
     pub fn import_cameras(&mut self, archive: CameraArchive) -> Result<usize> {
+        self.import_with(archive, Vault::store, Vault::delete)
+    }
+    fn import_with(
+        &mut self,
+        archive: CameraArchive,
+        mut save: impl FnMut(&str, &Credentials) -> Result<()>,
+        mut delete: impl FnMut(&str) -> Result<()>,
+    ) -> Result<usize> {
         archive.validate()?;
-        let mut cameras = archive
-            .cameras
-            .into_iter()
-            .map(PortableCamera::into_camera)
-            .collect::<Result<Vec<_>>>()?;
+        let mut records = archive.cameras;
         let tx = self
             .db
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -138,9 +153,9 @@ impl Store {
                 .iter()
                 .find(|f| f.to_lowercase() == folder.to_lowercase())
             {
-                for camera in &mut cameras {
-                    if camera.folder.as_deref() == Some(&folder) {
-                        camera.folder = Some(existing.clone());
+                for record in &mut records {
+                    if record.camera.folder.as_deref() == Some(&folder) {
+                        record.camera.folder = Some(existing.clone());
                     }
                 }
             } else {
@@ -148,163 +163,32 @@ impl Store {
             }
         }
         folders.sort_by_key(|v| v.to_lowercase());
-        tx.execute("INSERT INTO settings VALUES('camera_folders',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [serde_json::to_string(&folders)?])?;
-        for camera in &cameras {
-            tx.execute(
-                "INSERT INTO cameras VALUES(?1,?2)",
-                params![camera.id, serde_json::to_string(camera)?],
-            )?;
+        let mut created = vec![];
+        let result = (|| -> Result<usize> {
+            tx.execute("INSERT INTO settings VALUES('camera_folders',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[serde_json::to_string(&folders)?])?;
+            for record in &mut records {
+                record.camera.id = cctv_core::id();
+                record.camera.secret_ref = None;
+                if let Some(credentials) = record.credentials.take() {
+                    let reference = format!("camera:{}", record.camera.id);
+                    created.push(reference.clone());
+                    save(&reference, &credentials.into())?;
+                    record.camera.secret_ref = Some(reference);
+                }
+                tx.execute(
+                    "INSERT INTO cameras VALUES(?1,?2)",
+                    params![record.camera.id, serde_json::to_string(&record.camera)?],
+                )?;
+            }
+            tx.commit()?;
+            Ok(records.len())
+        })();
+        if result.is_err() {
+            for reference in created {
+                let _ = delete(&reference);
+            }
         }
-        tx.commit()?;
-        Ok(cameras.len())
-    }
-}
-
-/// Explicit allowlist: never serialize Camera, Vault references, profiles or app settings.
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CameraArchive {
-    pub format: String,
-    pub version: u32,
-    pub folders: Vec<String>,
-    pub cameras: Vec<PortableCamera>,
-}
-impl CameraArchive {
-    pub fn parse(data: &[u8]) -> Result<Self> {
-        ensure!(
-            data.len() as u64 <= MAX_ARCHIVE_BYTES,
-            "O arquivo excede o limite de 8 MiB."
-        );
-        let archive: Self = serde_json::from_slice(data).map_err(|_| {
-            anyhow::anyhow!("Arquivo de câmeras inválido. Use um JSON exportado pelo CCTV View.")
-        })?;
-        archive.validate()?;
-        Ok(archive)
-    }
-    pub fn sanitized_json(mut self) -> Result<String> {
-        self.validate()?;
-        for camera in &mut self.cameras {
-            camera.stream_url = portable_url(&camera.stream_url)?;
-            camera.substream_url = camera
-                .substream_url
-                .as_deref()
-                .map(portable_url)
-                .transpose()?;
-            camera.onvif_url = portable_url(&camera.onvif_url)?;
-        }
-        let data = serde_json::to_string_pretty(&self)?;
-        ensure!(
-            data.len() as u64 <= MAX_ARCHIVE_BYTES,
-            "A exportação excede o limite de 8 MiB."
-        );
-        Ok(data)
-    }
-    fn validate(&self) -> Result<()> {
-        ensure!(
-            self.format == "cctv-view-cameras" && self.version == 1,
-            "Formato ou versão de arquivo incompatível."
-        );
-        ensure!(
-            self.cameras.len() <= 2000 && self.folders.len() <= 500,
-            "O arquivo excede o limite de 2000 câmeras ou 500 pastas."
-        );
-        let mut names = HashSet::new();
-        for name in &self.folders {
-            ensure!(
-                folder_name(name)? == *name && names.insert(name.to_lowercase()),
-                "Pasta inválida ou repetida no arquivo."
-            );
-        }
-        for camera in &self.cameras {
-            ensure!(
-                camera
-                    .folder
-                    .as_ref()
-                    .is_none_or(|f| self.folders.contains(f)),
-                "Câmera aponta para uma pasta ausente do arquivo."
-            );
-            camera.clone().into_camera()?;
-        }
-        Ok(())
-    }
-}
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PortableCamera {
-    pub name: String,
-    pub folder: Option<String>,
-    pub stream_url: String,
-    pub substream_url: Option<String>,
-    pub onvif_url: String,
-    pub stream_kind: StreamKind,
-    pub snapshot_interval_ms: u32,
-    pub mjpeg_multipart: bool,
-    pub no_credentials: bool,
-    pub tls_verify: bool,
-    pub transport: Transport,
-    pub timeout_ms: u32,
-    pub audio_enabled: bool,
-    pub hardware_decode: bool,
-}
-// Query strings and fragments may hold passwords/tokens under arbitrary vendor keys.
-// Omit all of them rather than pretending a blacklist can identify every secret.
-fn portable_url(value: &str) -> Result<String> {
-    if value.is_empty() {
-        return Ok(String::new());
-    }
-    let mut url =
-        url::Url::parse(value).map_err(|_| anyhow::anyhow!("Uma câmera contém URL inválida."))?;
-    ensure!(
-        url.username().is_empty() && url.password().is_none(),
-        "URLs com credenciais não podem ser transferidas."
-    );
-    url.set_query(None);
-    url.set_fragment(None);
-    Ok(url.into())
-}
-impl PortableCamera {
-    fn from_camera(c: &Camera) -> Result<Self> {
-        Ok(Self {
-            name: c.name.clone(),
-            folder: c.folder.clone(),
-            stream_url: portable_url(&c.stream_url)?,
-            substream_url: c.substream_url.as_deref().map(portable_url).transpose()?,
-            onvif_url: portable_url(&c.capabilities.device_url)?,
-            stream_kind: c.stream_kind,
-            snapshot_interval_ms: c.snapshot_interval_ms,
-            mjpeg_multipart: c.mjpeg_multipart,
-            no_credentials: c.no_credentials,
-            tls_verify: c.tls_verify,
-            transport: c.transport.clone(),
-            timeout_ms: c.timeout_ms,
-            audio_enabled: c.audio_enabled,
-            hardware_decode: c.hardware_decode,
-        })
-    }
-    pub fn into_camera(self) -> Result<Camera> {
-        let mut c = Camera {
-            name: self.name,
-            folder: self.folder,
-            stream_kind: self.stream_kind,
-            snapshot_interval_ms: self.snapshot_interval_ms,
-            mjpeg_multipart: self.mjpeg_multipart,
-            no_credentials: self.no_credentials,
-            tls_verify: self.tls_verify,
-            transport: self.transport,
-            timeout_ms: self.timeout_ms,
-            audio_enabled: self.audio_enabled,
-            hardware_decode: self.hardware_decode,
-            substream_url: self
-                .substream_url
-                .as_deref()
-                .map(portable_url)
-                .transpose()?,
-            ..Default::default()
-        };
-        c.set_onvif_endpoint(&portable_url(&self.onvif_url)?)?;
-        c.set_stream_url(&portable_url(&self.stream_url)?)?;
-        c.validate()?;
-        Ok(c)
+        result
     }
 }
 
@@ -314,114 +198,149 @@ mod tests {
     fn camera() -> Camera {
         Camera {
             name: "Portaria".into(),
-            stream_url: "rtsp://camera.test/live?password=secret#token".into(),
-            secret_ref: Some("vault-private-reference".into()),
+            stream_url: "rtsp://camera.test/live?channel=1&password=fixture#token".into(),
+            secret_ref: Some("original-reference".into()),
             ..Default::default()
         }
     }
     #[test]
-    fn folders_preserve_views_and_clone_omits_secrets() -> Result<()> {
-        let mut s = Store::memory()?;
-        s.create_folder(" Entrada ")?;
-        assert!(s.create_folder("entrada").is_err());
+    fn folders_and_clone_preserve_complete_camera() -> Result<()> {
+        let mut store = Store::memory()?;
+        store.create_folder("Entrada")?;
+        assert!(store.create_folder("entrada").is_err());
         let c = camera();
-        s.save_camera(&c)?;
-        s.move_camera(&c.id, Some("Entrada"))?;
+        store.save_camera(&c)?;
+        store.move_camera(&c.id, Some("Entrada"))?;
         let mut v = View::default();
         v.preset(1, 1, std::slice::from_ref(&c.id), false);
-        s.save_view(&v)?;
-        let copy = s.prepare_camera_clone(&c.id)?;
-        s.save_camera(&copy)?;
-        assert_ne!(copy.id, c.id);
-        assert!(copy.secret_ref.is_none());
-        assert!(!copy.ptz_allowed);
-        assert_eq!(copy.folder.as_deref(), Some("Entrada"));
-        assert_eq!(copy.stream_url, "rtsp://camera.test/live");
-        s.change_folder("Entrada", Some("Exterior"))?;
-        assert!(s
-            .cameras()?
-            .iter()
-            .all(|c| c.folder.as_deref() == Some("Exterior")));
-        s.change_folder("Exterior", None)?;
-        assert!(s.cameras()?.iter().all(|c| c.folder.is_none()));
-        assert_eq!(s.views()?[0], v);
+        store.save_view(&v)?;
+        store.clone_with(
+            &c.id,
+            |_| {
+                Ok(Credentials {
+                    username: "user".into(),
+                    password: "fixture-password".into(),
+                })
+            },
+            |_, _| Ok(()),
+            |_| Ok(()),
+        )?;
+        let cloned = store.cameras()?.into_iter().find(|v| v.id != c.id).unwrap();
+        assert_ne!(cloned.id, c.id);
+        assert_ne!(cloned.secret_ref, c.secret_ref);
+        assert_eq!(cloned.stream_url, c.stream_url);
+        store.change_folder("Entrada", Some("Externo"))?;
+        store.change_folder("Externo", None)?;
+        assert!(store.cameras()?.iter().all(|c| c.folder.is_none()));
+        assert_eq!(store.views()?[0], v);
         assert_eq!(
-            s.cameras()?
+            store
+                .cameras()?
                 .iter()
                 .find(|v| v.id == c.id)
                 .unwrap()
                 .secret_ref,
             c.secret_ref
         );
-        assert!(s.move_camera(&c.id, Some("missing")).is_err());
+        assert!(store.move_camera(&c.id, Some("missing")).is_err());
         let mut invalid = c.clone();
         invalid.folder = Some("missing".into());
-        assert!(s.save_camera(&invalid).is_err());
-        assert!(s
-            .cameras()?
-            .iter()
-            .find(|camera| camera.id == c.id)
-            .unwrap()
-            .folder
-            .is_none());
+        assert!(store.save_camera(&invalid).is_err());
         Ok(())
     }
     #[test]
-    fn import_merges_folder_case_and_rejects_incomplete_batches() -> Result<()> {
+    fn cloning_uses_one_metadata_snapshot_when_keyring_blocks() -> Result<()> {
+        let dir = std::env::temp_dir().join(cctv_core::id());
+        std::fs::create_dir_all(&dir)?;
+        let mut store = Store::open(dir.join("test.db"))?;
+        let source = camera();
+        store.save_camera(&source)?;
+        let other = Store::open(dir.join("test.db"))?;
+        let mut changed = source.clone();
+        changed.set_stream_url("rtsp://different.test/live")?;
+        store.clone_with(
+            &source.id,
+            |_| {
+                other.save_camera(&changed)?;
+                Ok(Credentials {
+                    username: "original-user".into(),
+                    password: "original-password".into(),
+                })
+            },
+            |_, c| {
+                assert_eq!(c.password, "original-password");
+                Ok(())
+            },
+            |_| Ok(()),
+        )?;
+        let copy = store
+            .cameras()?
+            .into_iter()
+            .find(|c| c.id != source.id)
+            .unwrap();
+        assert_eq!(copy.stream_url, source.stream_url);
+        drop(other);
+        drop(store);
+        std::fs::remove_dir_all(dir)?;
+        Ok(())
+    }
+    #[test]
+    fn encrypted_import_restores_credentials_and_rolls_back_failures() -> Result<()> {
         let mut source = Store::memory()?;
         source.create_folder("Exterior")?;
-        let mut c = camera();
-        c.folder = Some("Exterior".into());
-        source.save_camera(&c)?;
-        let json = source.export_cameras()?;
+        let mut camera = camera();
+        camera.folder = Some("Exterior".into());
+        source.save_camera(&camera)?;
+        let archive = source.archive_with(|_| {
+            Ok(Credentials {
+                username: "operator".into(),
+                password: "camera-password".into(),
+            })
+        })?;
+        let encrypted = archive.encrypt("file-password")?;
+        assert!(!encrypted.contains("camera-password"));
+        assert!(!encrypted.contains("Portaria"));
         let mut target = Store::memory()?;
         target.create_folder("EXTERIOR")?;
-        target.import_cameras(CameraArchive::parse(json.as_bytes())?)?;
-        assert_eq!(target.folders()?, vec!["EXTERIOR"]);
+        let mut secrets = vec![];
+        target.import_with(
+            CameraArchive::decrypt(encrypted.as_bytes(), "file-password")?,
+            |id, c| {
+                secrets.push((id.to_string(), c.username.clone(), c.password.clone()));
+                Ok(())
+            },
+            |_| Ok(()),
+        )?;
+        assert_eq!(target.cameras()?[0].stream_url, camera.stream_url);
         assert_eq!(target.cameras()?[0].folder.as_deref(), Some("EXTERIOR"));
-        let mut archive = CameraArchive::parse(json.as_bytes())?;
-        let mut bad = archive.cameras[0].clone();
-        bad.timeout_ms = 0;
-        archive.cameras.push(bad);
-        assert!(target.import_cameras(archive).is_err());
+        assert_eq!(secrets[0].2, "camera-password");
+        assert_ne!(secrets[0].0, "original-reference");
+        let persisted: String =
+            target
+                .db
+                .query_row("SELECT data FROM cameras LIMIT 1", [], |r| r.get(0))?;
+        assert!(!persisted.contains("camera-password"));
+        assert!(!persisted.contains("operator"));
+        let mut broken = CameraArchive::decrypt(encrypted.as_bytes(), "file-password")?;
+        broken.cameras.push(broken.cameras[0].clone());
+        let mut attempts = 0;
+        let mut cleaned = vec![];
+        assert!(target
+            .import_with(
+                broken,
+                |_, _| {
+                    attempts += 1;
+                    ensure!(attempts < 2, "fixture failure");
+                    Ok(())
+                },
+                |id| {
+                    cleaned.push(id.to_string());
+                    Ok(())
+                }
+            )
+            .is_err());
+        assert_eq!(cleaned.len(), 2);
         assert_eq!(target.cameras()?.len(), 1);
-        let mut data: serde_json::Value = serde_json::from_str(&json)?;
-        data["cameras"][0]["stream_url"] = "rtsp://user:password@camera.test/live".into();
-        assert!(CameraArchive::parse(serde_json::to_string(&data)?.as_bytes()).is_err());
-        assert!(CameraArchive::parse(&vec![b' '; MAX_ARCHIVE_BYTES as usize + 1]).is_err());
-        Ok(())
-    }
-    #[test]
-    fn archive_is_additive_atomic_and_contains_no_secret_metadata() -> Result<()> {
-        let mut s = Store::memory()?;
-        s.create_folder("Vazia")?;
-        let c = camera();
-        s.save_camera(&c)?;
-        let json = s.export_cameras()?;
-        for forbidden in [
-            "secret_ref",
-            "vault-private-reference",
-            "password=secret",
-            "#token",
-            "profiles",
-            "app_lock",
-        ] {
-            assert!(!json.contains(forbidden));
-        }
-        let a = CameraArchive::parse(json.as_bytes())?;
-        assert_eq!(s.import_cameras(a)?, 1);
-        assert_eq!(s.cameras()?.len(), 2);
-        assert_ne!(s.cameras()?[0].id, s.cameras()?[1].id);
-        let mut a = CameraArchive::parse(json.as_bytes())?;
-        a.cameras[0].stream_url = "file:///etc/passwd".into();
-        assert!(s.import_cameras(a).is_err());
-        assert_eq!(s.cameras()?.len(), 2);
-        let mut data: serde_json::Value = serde_json::from_str(&json)?;
-        data["cameras"][0]["password"] = "bad".into();
-        assert!(CameraArchive::parse(serde_json::to_string(&data)?.as_bytes()).is_err());
-        data["version"] = 99.into();
-        assert!(CameraArchive::parse(serde_json::to_string(&data)?.as_bytes()).is_err());
-        assert_eq!(s.folders()?, vec!["Vazia"]);
         Ok(())
     }
 }

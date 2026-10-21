@@ -218,3 +218,114 @@ pub(crate) fn lock(s: &Shared) {
         },
     );
 }
+
+/// Fresh authorization for each action; unlocking the app does not cache this permission.
+pub(crate) fn confirm_action(
+    s: &Shared,
+    parent: &impl IsA<gtk::Window>,
+    purpose: &str,
+    action: impl FnOnce() + 'static,
+) {
+    if s.locked.get() {
+        return;
+    }
+    let path = s.path.clone();
+    let state = s.clone();
+    let parent = parent.as_ref().downgrade();
+    let purpose = purpose.to_string();
+    jobs::run(
+        move || Store::open(path)?.has_app_password(),
+        move |result| {
+            let Some(parent) = parent
+                .upgrade()
+                .filter(|p| p.is_visible() && !state.locked.get())
+            else {
+                return;
+            };
+            match result {
+                Ok(false) => action(),
+                Err(e) => message(&parent, &e.to_string()),
+                Ok(true) => {
+                    let d = gtk::Dialog::builder()
+                        .transient_for(&parent)
+                        .destroy_with_parent(true)
+                        .modal(true)
+                        .title("Confirmar senha do aplicativo")
+                        .default_width(420)
+                        .build();
+                    d.add_button("Cancelar", gtk::ResponseType::Cancel);
+                    d.add_button("Continuar", gtk::ResponseType::Accept)
+                        .add_css_class("suggested-action");
+                    d.set_default_response(gtk::ResponseType::Accept);
+                    let area = d.content_area();
+                    margins(&area, 20);
+                    area.set_spacing(12);
+                    forms::section(&area, &purpose);
+                    let password = gtk::PasswordEntry::builder()
+                        .show_peek_icon(true)
+                        .activates_default(true)
+                        .build();
+                    password.set_tooltip_text(Some("Senha do aplicativo"));
+                    forms::row(&area, "Senha do aplicativo", &password);
+                    let feedback = forms::feedback(&area);
+                    let busy = Rc::new(std::cell::Cell::new(false));
+                    let action = Rc::new(RefCell::new(Some(action)));
+                    d.connect_response(move |d, response| {
+                        if response != gtk::ResponseType::Accept {
+                            action.borrow_mut().take();
+                            password.set_text("");
+                            forms::close(d);
+                            return;
+                        }
+                        if busy.replace(true) {
+                            return;
+                        }
+                        let candidate = password.text().to_string();
+                        password.set_text("");
+                        d.set_response_sensitive(gtk::ResponseType::Accept, false);
+                        feedback.set_text("Verificando…");
+                        let path = state.path.clone();
+                        let state = state.clone();
+                        let weak = d.downgrade();
+                        let busy = busy.clone();
+                        let action = action.clone();
+                        let feedback = feedback.clone();
+                        jobs::run(
+                            move || -> Result<bool> {
+                                let valid = Store::open(path)?.verify_app_password(&candidate)?;
+                                if !valid {
+                                    std::thread::sleep(Duration::from_millis(750));
+                                }
+                                Ok(valid)
+                            },
+                            move |result| {
+                                busy.set(false);
+                                let Some(d) = weak
+                                    .upgrade()
+                                    .filter(|d| d.is_visible() && !state.locked.get())
+                                else {
+                                    action.borrow_mut().take();
+                                    return;
+                                };
+                                d.set_response_sensitive(gtk::ResponseType::Accept, true);
+                                match result {
+                                    Ok(true) => {
+                                        // Closing a GtkDialog can emit a cancel/delete response.
+                                        let authorized = action.borrow_mut().take();
+                                        forms::close(&d);
+                                        if let Some(action) = authorized {
+                                            action();
+                                        }
+                                    }
+                                    Ok(false) => feedback.set_text("Senha incorreta."),
+                                    Err(e) => feedback.set_text(&e.to_string()),
+                                }
+                            },
+                        );
+                    });
+                    d.present();
+                }
+            }
+        },
+    );
+}

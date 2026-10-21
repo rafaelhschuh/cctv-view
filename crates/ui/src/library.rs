@@ -319,7 +319,7 @@ impl Library {
             type_group.add_widget(&kind);
             row.append(&kind);
             let edit = button("Editar câmera", "document-edit-symbolic");
-            let clone = button("Clonar câmera sem senha", "edit-copy-symbolic");
+            let clone = button("Clonar câmera", "edit-copy-symbolic");
             let move_to = button("Mover para pasta", "folder-symbolic");
             let delete = button("Excluir câmera", "user-trash-symbolic");
             for b in [&edit, &clone, &move_to, &delete] {
@@ -465,16 +465,14 @@ impl Library {
             return;
         }
         let id = id.to_string();
-        let path = self.state.path.clone();
         let weak = Rc::downgrade(self);
-        jobs::run(
-            move || Store::open(path)?.prepare_camera_clone(&id),
-            move |result| {
+        auth::confirm_action(
+            &self.state,
+            &self.state.window,
+            "Clonar câmera",
+            move || {
                 if let Some(l) = weak.upgrade() {
-                    match result {
-                        Ok(camera) => camera::clone_form(&l.state, camera, Some(l.callback())),
-                        Err(e) => message(&l.state.window, &e.to_string()),
-                    }
+                    l.mutate(move |store| store.clone_camera(&id));
                 }
             },
         );
