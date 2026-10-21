@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-10-21
+
+- Editar/visualizar dados, clonar e exportar câmeras pedem a senha do aplicativo a cada ação, quando configurada. Cancelar ou errar a senha não libera a operação; desbloqueio inicial não guarda essa autorização.
+- Clone completo em uma ação: preserva URLs, parâmetros, fragmentos, configurações/perfis e credenciais em nova entrada independente no Secret Service. Edição permite visualizar a senha salva após autorização.
+- Removida a revisão obrigatória de URLs e a exclusão de credenciais da transferência. Exportação sempre cria JSON criptografado com senha escolhida na hora e confirmação; importação exige a senha do arquivo.
+- Criptografia autenticada AES-256-GCM, salt/nonce aleatórios, chave derivada por PBKDF2-HMAC-SHA256; formato versionado com limites e rejeição de senha incorreta/arquivo alterado antes de importar. Senhas de câmera continuam fora do SQLite e logs.
+- Restauração de credenciais em novos IDs do chaveiro, transação SQLite e limpeza compensatória em falha; teste GTK usa chaveiro e D-Bus descartáveis.
+- Verificado com 27 testes padrão, GTK claro/escuro, fmt/Clippy/release, auditoria local e smoke/checksum do AppImage 0.4.0.
+
 ## 0.3.0 — 2026-10-21
 
 - Biblioteca com busca por nome/endereço/fabricante, filtro por pasta, contador e linhas nativas com nome, pasta/endereço, tipo e ações alinhadas.

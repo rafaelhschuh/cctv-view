@@ -34,3 +34,8 @@ Entrega 0.2.0 implementada e verificada localmente; evidências em PROGRESS.md, 
 Organizar linhas, busca e filtro por pasta. Pastas planas persistentes com movimentação/renomeação/exclusão sem perder câmeras ou Views; clonagem em rascunho sem ler o chaveiro. Preferências em três abas. Transferência JSON com revisão, exclusão de credenciais/query/fragmento, validação completa, novos IDs e importação aditiva em transação. Verificar persistência, casos inválidos, GTK claro/escuro, limites e AppImage; somente commits locais.
 
 Entrega 0.3.0 concluída localmente: 26 testes padrão, GTK em claro/escuro, release e smoke do AppImage passaram; capturas em UI_REVIEW.md e logs em PROGRESS.md. Próximas ações externas ao pedido: homologação H01/H02. Sem push/PR.
+
+## Credenciais e transferência criptografada (0.4.0)
+Correção de escopo solicitada: preservar dados completos, retirar revisão de URLs e clonagem sem senha; pedir senha do aplicativo por ação de visualização/edição/clonagem/exportação quando configurada. JSON sempre criptografado com senha escolhida na exportação e solicitada na importação. Verificar AEAD, senha incorreta, adulteração, restauração independente de credenciais, falha/rollback, GTK com Secret Service privado, release e AppImage. Somente commits locais.
+
+Entrega 0.4.0 concluída localmente: 27 testes padrão, regressão GTK com chaveiro privado em claro/escuro, release, auditoria local e smoke/checksum do AppImage passaram. Política de credenciais/transferência de 0.3.0 substituída pelo pedido atual. Somente commits locais.

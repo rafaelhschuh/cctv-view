@@ -1,12 +1,12 @@
 # Matriz de funcionalidades e validação
 
-**0.3.0, prévia funcional. Não é uma declaração de homologação 1.0.** Código integrado e verificação local são separados de testes físicos. A especificação integral permanece em SPECIFICATION.md.
+**0.4.0, prévia funcional. Não é uma declaração de homologação 1.0.** Código integrado e verificação local são separados de testes físicos. A especificação integral permanece em SPECIFICATION.md.
 
 | Requisito | Implementação e evidência | Limite / estado de homologação |
 |---|---|---|
 | GTK4 nativo e tema | Janela real em Zorin 18, teste GTK/Xvfb e PNG inspecionado; lista conferida em claro/escuro | Wayland, HiDPI, leitor de tela e revisão completa de temas: NOT VERIFIED |
 | Câmeras CRUD | Cadastro em abas com rodapé compacto, tipos RTSP/HTTP(S)/MJPEG/JPEG, opções específicas, Sem credenciais/validação TLS configuráveis, destino derivado da URL, endpoint ONVIF salvo sem consulta/invalidação, transporte/timeout/áudio/hardware/chaveiro; SQLite e GTK testados | Hardware de câmera: NOT VERIFIED |
-| Biblioteca/pastas/transferência | Busca, linhas alinhadas, pastas persistentes, rascunho de clone sem credenciais, revisão editável de URLs, JSON validado e importação aditiva/atômica | Tokens em caminhos de URL exigem revisão do usuário; não transfere Views/chaveiro |
+| Biblioteca/pastas/transferência | Busca, pastas, clone completo com credenciais independentes, reautenticação por ação e JSON criptografado com senha do arquivo; URLs preservadas e importação aditiva/atômica | Senha do arquivo necessária para importar; Views/senha do aplicativo não são transferidas |
 | RTSP | H.264 TCP autenticado no simulador; senha errada e indisponibilidade testadas | UDP e fabricantes: NOT VERIFIED |
 | HTTP/JPEG/MJPEG/HLS/HEVC | Frames reais locais; modos explícitos MJPEG multipart/contínuo e JPEG periódico/cancelável testados | Variantes de fabricante: NOT VERIFIED |
 | HTTPS | TLS validado por padrão; exceção explícita por câmera testada com TS/HLS/JPEG e SOAP autoassinados | Conexão com CA privada em hardware: NOT VERIFIED |

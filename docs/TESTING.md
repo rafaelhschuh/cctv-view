@@ -5,7 +5,7 @@
 ```sh
 scripts/check.sh
 scripts/test-protocols.sh
-xvfb-run -a dbus-run-session -- cargo test -p cctv-ui -- --ignored --test-threads=1
+xvfb-run -a scripts/test-ui.sh
 scripts/test-native-services.sh
 ```
 
@@ -57,3 +57,10 @@ Regressões de storage cobrem pastas, renomeação/exclusão preservando Views e
 A regressão GTK existente foi ampliada: criar pasta, mover, clonar por rascunho, busca sem resultados, renomear com filtro preservado, três abas de preferências, revisão editável de exportação, arquivo real em worker, leitura/prévia, cancelar antes de gravar e rejeitar cancelamento durante importação. Usa banco e credenciais fictícias em diretório temporário. Diálogo do seletor nativo de arquivos por interação física/portal, Wayland, Orca e HiDPI: NOT VERIFIED.
 
 Verificação final: scripts/check.sh com 26 testes padrão, fmt/Clippy/release; Clippy repetido após ajuste dos rodapés; regressão GTK em ambos os temas, com capturas inspecionadas. AppImage 0.3.0 validou --version, --list-cameras sem display e abertura/encerramento com biblioteca fictícia em /tmp/cctv-library-package, por extração/Xvfb; SHA256SUMS conferido. Auditoria RustSec com base local: zero vulnerabilidades/avisos. Logs em PROGRESS.md.
+
+## Credenciais e criptografia 0.4.0
+Storage testa ciphertext sem nomes/URLs/usuário/senha legíveis, salt/nonce diferentes a cada exportação, igualdade completa após descriptografar, senha errada, ciphertext adulterado, custo KDF/formato/tamanho inválido e senha vazia. Importação com backend de segredos controlado verifica senha restaurada sob nova referência, ausência de plaintext no SQLite e compensação de segredos quando o segundo registro falha.
+
+A regressão GTK agora requer **scripts/test-ui.sh**, que inicia D-Bus/Secret Service privados com XDG temporário e encerra/apaga tudo ao terminar. Não execute o teste diretamente contra o chaveiro do usuário. O display deve ser Xvfb. O fluxo verifica clone com senha real fictícia, exportação criptografada/arquivo, senha de arquivo incorreta/correta, importação, senha do app incorreta/correta/cancelada, senha salva visível no campo após autenticação e novo prompt a cada exportação.
+
+Verificação final 0.4.0: 27 testes padrão, fmt/Clippy/release, regressão GTK em claro/escuro com chaveiro privado, auditoria RustSec local sem achados e AppImage com --version/--list-cameras headless, GUI isolada e checksum. Teste adicional de clonagem altera a câmera por uma segunda conexão durante a leitura de credenciais e confirma que a cópia mantém o mesmo conjunto de metadados original. O teste de autorização cobre dados de uma lista desatualizada e verifica nova confirmação após cada ação. Logs/capturas em PROGRESS.md e UI_REVIEW.md.

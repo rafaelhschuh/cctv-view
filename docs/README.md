@@ -8,7 +8,9 @@
 - [PLAN](PLAN.md), [TASKS](TASKS.md), [PROGRESS](PROGRESS.md), [FEATURES](FEATURES.md): continuidade e evidências.
 - [Especificação original](SPECIFICATION.md), [ADR inicial](adr/0001-initial-architecture.md).
 
-- [Revisões UI/UX e capturas (0.1.1–0.3.0)](UI_REVIEW.md)
+- [Revisões UI/UX e capturas (0.1.1–0.4.0)](UI_REVIEW.md)
 
 - [CLI de inicialização e scripts](CLI.md)
 - [ADR 0002 — Bloqueio e CLI](adr/0002-application-lock-and-cli.md)
+
+- [ADR 0003 — Reautenticação e arquivo criptografado](adr/0003-encrypted-camera-transfer.md)

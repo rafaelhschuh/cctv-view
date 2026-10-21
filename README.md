@@ -2,7 +2,7 @@
 
 Aplicativo Linux nativo para monitoramento de câmeras IP, em Rust, GTK 4 e FFmpeg/libav. Interface em português e tema do sistema, com prioridade para Zorin OS 18 x86_64.
 
-A versão **0.3.0** integra cadastro de câmeras, reprodução multistream, Views persistentes, editor visual, foco, zoom digital, áudio exclusivo, descoberta ONVIF, perfis, PTZ e presets. É uma versão inicial: validação em câmeras físicas, drivers VA-API e em outro computador permanece pendente. Consulte a [matriz de validação](docs/FEATURES.md) antes de usar em operação crítica.
+A versão **0.4.0** integra cadastro de câmeras, reprodução multistream, Views persistentes, editor visual, foco, zoom digital, áudio exclusivo, descoberta ONVIF, perfis, PTZ e presets. É uma versão inicial: validação em câmeras físicas, drivers VA-API e em outro computador permanece pendente. Consulte a [matriz de validação](docs/FEATURES.md) antes de usar em operação crítica.
 
 ## Executar
 
@@ -33,9 +33,11 @@ Dados seguem XDG e credenciais ficam no chaveiro Secret Service. Não existe tel
 
 ## Organizar e transferir câmeras
 
-Na **Biblioteca de câmeras**, use a busca e o filtro de pasta. **Nova pasta** cria uma pasta vazia; os ícones ao lado do filtro renomeiam ou excluem a pasta selecionada. Excluir uma pasta mantém as câmeras em **Sem pasta**. Em cada linha: editar, clonar sem senha, mover para pasta e excluir câmera. Clonar abre um rascunho revisável; **Cancelar** não cria a cópia.
+Na **Biblioteca de câmeras**, use a busca e o filtro de pasta. **Nova pasta** cria uma pasta vazia; os ícones ao lado do filtro renomeiam ou excluem a pasta selecionada. Excluir uma pasta mantém as câmeras em **Sem pasta**. Em cada linha: editar, clonar, mover para pasta e excluir câmera. Clonar cria uma cópia completa, incluindo URLs, configurações e credenciais, com nova referência independente no chaveiro.
 
-Em **Preferências → Biblioteca**, exporte/importe um JSON com câmeras e pastas. Credenciais, perfis/autorização PTZ, senha do aplicativo e Views não são transferidos. Query e fragmento de URLs são omitidos; revise parâmetros de canal após importar. Antes de exportar, revise/edite as URLs para remover segredos que estejam no caminho; essas edições afetam somente o arquivo. Importar mostra uma prévia e adiciona novos cadastros sem substituir os atuais. Exportar exige um nome de arquivo novo.
+Se houver senha no aplicativo, **editar/visualizar os dados, clonar e exportar** sempre pedem essa senha em um diálogo, mesmo com o aplicativo desbloqueado. Sem senha configurada, essas ações abrem diretamente.
+
+Em **Preferências → Biblioteca**, exporte/importe um JSON **criptografado** com câmeras, pastas e credenciais. A exportação pede uma senha para o arquivo, separada da senha do aplicativo; a importação pede essa senha para descriptografar e mostra a prévia antes de adicionar novos cadastros. URLs completas, inclusive parâmetros e fragmentos, são preservadas. Views e a senha de bloqueio do aplicativo não são transferidas. Exportar exige um nome de arquivo novo.
 
 ## Senha do aplicativo
 
