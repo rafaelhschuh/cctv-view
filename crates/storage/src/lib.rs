@@ -44,10 +44,26 @@ impl Store {
         Ok(Self { db })
     }
     pub fn cameras(&self) -> Result<Vec<Camera>> {
-        self.list("SELECT data FROM cameras ORDER BY json_extract(data,'$.name') COLLATE NOCASE")
+        let cameras: Vec<Camera> = self
+            .list("SELECT data FROM cameras ORDER BY json_extract(data,'$.name') COLLATE NOCASE")?;
+        for camera in &cameras {
+            camera.validate()?;
+        }
+        Ok(cameras)
     }
     pub fn views(&self) -> Result<Vec<View>> {
-        self.list("SELECT data FROM views ORDER BY json_extract(data,'$.order'), json_extract(data,'$.name')")
+        let views:Vec<View>=self.list("SELECT data FROM views ORDER BY json_extract(data,'$.order'), json_extract(data,'$.name')")?;
+        for view in &views {
+            view.validate()?;
+        }
+        Ok(views)
+    }
+    pub fn update_camera_status(&self, id: &str, status: &str) -> Result<()> {
+        self.db.execute(
+            "UPDATE cameras SET data=json_set(data,'$.last_status',?2) WHERE id=?1",
+            params![id, status],
+        )?;
+        Ok(())
     }
     fn list<T: serde::de::DeserializeOwned>(&self, sql: &str) -> Result<Vec<T>> {
         let mut statement = self.db.prepare(sql)?;
@@ -189,6 +205,27 @@ mod tests {
         assert_eq!(s.preferences()?.last_view, p.last_view);
         s.delete_view(&v.id)?;
         assert!(s.views()?.is_empty());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod vault_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires an isolated unlocked Secret Service session; see docs/TESTING.md"]
+    fn secret_service_roundtrip_and_delete() -> Result<()> {
+        let reference = format!("test:{}", cctv_core::id());
+        let credentials = Credentials {
+            username: "fixture".into(),
+            password: "temporary-fixture-secret".into(),
+        };
+        Vault::store(&reference, &credentials)?;
+        let restored = Vault::get(&reference)?;
+        assert_eq!(restored.username, credentials.username);
+        assert_eq!(restored.password, credentials.password);
+        Vault::delete(&reference)?;
+        assert!(Vault::get(&reference).is_err());
         Ok(())
     }
 }

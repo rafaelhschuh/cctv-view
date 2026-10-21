@@ -1,0 +1,8 @@
+[package]
+name = "cctv-view"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+cctv-ui.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

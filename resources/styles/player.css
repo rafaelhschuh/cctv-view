@@ -1,0 +1,7 @@
+/* Only the text over video is styled; application controls follow the system theme. */
+.cctv-player-status {
+  color: white;
+  background-color: alpha(black, 0.78);
+  padding: 8px 12px;
+  border-radius: 6px;
+}
