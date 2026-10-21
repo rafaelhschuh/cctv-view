@@ -105,6 +105,25 @@ impl Store {
         )?;
         Ok(())
     }
+    pub fn reorder_views(&mut self, ids: &[String]) -> Result<()> {
+        let existing = self.views()?;
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        ensure!(
+            ids.len() == existing.len()
+                && unique.len() == ids.len()
+                && existing.iter().all(|v| unique.contains(&v.id)),
+            "A lista de Views mudou; tente novamente."
+        );
+        let tx = self.db.transaction()?;
+        for (order, id) in ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE views SET data=json_set(data,'$.order',?2) WHERE id=?1",
+                params![id, order as i32],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
     pub fn delete_view(&self, id: &str) -> Result<()> {
         self.db.execute("DELETE FROM views WHERE id=?1", [id])?;
         Ok(())
@@ -226,6 +245,31 @@ mod vault_tests {
         assert_eq!(restored.password, credentials.password);
         Vault::delete(&reference)?;
         assert!(Vault::get(&reference).is_err());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod view_order_regressions {
+    use super::*;
+    #[test]
+    fn reorder_is_atomic_and_preserves_view_content() -> Result<()> {
+        let mut store = Store::memory()?;
+        let a = View {
+            name: "A".into(),
+            ..Default::default()
+        };
+        let b = View {
+            name: "B".into(),
+            ..Default::default()
+        };
+        store.save_view(&a)?;
+        store.save_view(&b)?;
+        store.reorder_views(&[b.id.clone(), a.id.clone()])?;
+        assert_eq!(store.views()?[0].id, b.id);
+        assert_eq!(store.views()?[1].name, "A");
+        assert!(store.reorder_views(&[a.id.clone(), a.id]).is_err());
+        assert_eq!(store.views()?[0].id, b.id);
         Ok(())
     }
 }

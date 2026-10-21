@@ -1,10 +1,12 @@
 mod camera;
 mod diagnostics;
 mod editor;
+mod forms;
 mod jobs;
 mod monitor;
 mod player;
 mod settings;
+mod views;
 pub(crate) use monitor::{render, tile};
 mod ptz;
 use anyhow::Result;
@@ -33,6 +35,8 @@ pub(crate) struct State {
     grid: gtk::Grid,
     heading: gtk::Label,
     status: gtk::Label,
+    edit_view: glib::WeakRef<gtk::Button>,
+    focus_bar: glib::WeakRef<gtk::Box>,
     path: PathBuf,
     manager: Arc<Mutex<SessionManager>>,
     runtime: Arc<tokio::runtime::Runtime>,
@@ -128,6 +132,8 @@ fn build(
         .unwrap_or_default();
     let heading = gtk::Label::new(Some("Monitoramento"));
     heading.add_css_class("title");
+    heading.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    heading.set_max_width_chars(20);
     header.set_title_widget(Some(&heading));
     let sidebar_toggle = gtk::ToggleButton::builder()
         .icon_name("sidebar-show-symbolic")
@@ -135,9 +141,9 @@ fn build(
         .active(prefs.sidebar)
         .build();
     header.pack_start(&sidebar_toggle);
-    let library = button("Câmeras", "camera-video-symbolic");
+    let library = gtk::Button::with_label("Câmeras");
     header.pack_start(&library);
-    let edit = button("Editar View", "document-edit-symbolic");
+    let edit = gtk::Button::with_label("Editar View");
     header.pack_end(&edit);
     let fullscreen = button("Tela cheia · F11", "view-fullscreen-symbolic");
     header.pack_end(&fullscreen);
@@ -163,25 +169,21 @@ fn build(
         .child(&view_list)
         .build();
     sidebar.append(&scroll);
-    let new_view = button("Nova View", "list-add-symbolic");
+    let new_view = gtk::Button::with_label("Nova View");
+    new_view.add_css_class("suggested-action");
     sidebar.append(&new_view);
-    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-    let duplicate = button("Duplicar", "edit-copy-symbolic");
-    let delete = button("Excluir View", "user-trash-symbolic");
-    let favorite = button("Favorita", "starred-symbolic");
-    let initial = button("View inicial", "go-home-symbolic");
-    for b in [&duplicate, &favorite, &initial, &delete] {
-        actions.append(b);
-    }
-    sidebar.append(&actions);
-    let reorder = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-    let up = button("Subir View", "go-up-symbolic");
-    let down = button("Descer View", "go-down-symbolic");
-    reorder.append(&up);
-    reorder.append(&down);
-    sidebar.append(&reorder);
     content.append(&sidebar);
-    content.append(&gtk::Separator::new(gtk::Orientation::Vertical));
+    let separator = gtk::Separator::new(gtk::Orientation::Vertical);
+    content.append(&separator);
+    let focus_bar = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    margins(&focus_bar, 8);
+    let back = gtk::Button::with_label("Voltar à grade");
+    focus_bar.append(&back);
+    let focus_hint = gtk::Label::new(Some("Câmera em foco · Escape também retorna à grade"));
+    focus_hint.set_wrap(true);
+    focus_bar.append(&focus_hint);
+    focus_bar.set_visible(false);
+    root.append(&focus_bar);
     let grid = gtk::Grid::builder()
         .column_homogeneous(true)
         .row_homogeneous(true)
@@ -196,6 +198,7 @@ fn build(
     content.set_vexpand(true);
     let status = gtk::Label::new(Some("Pronto · duplo clique para foco · Escape para voltar"));
     status.set_xalign(0.);
+    status.set_wrap(true);
     margins(&status, 8);
     status.add_css_class("dim-label");
     root.append(&status);
@@ -203,8 +206,13 @@ fn build(
     let selected = prefs
         .initial_view
         .clone()
-        .or(prefs.last_view.clone())
         .filter(|id| views.iter().any(|v| &v.id == id))
+        .or_else(|| {
+            prefs
+                .last_view
+                .clone()
+                .filter(|id| views.iter().any(|v| &v.id == id))
+        })
         .or_else(|| views.first().map(|v| v.id.clone()));
     let state = Rc::new(State {
         window,
@@ -218,6 +226,8 @@ fn build(
         grid,
         heading,
         status,
+        edit_view: edit.downgrade(),
+        focus_bar: focus_bar.downgrade(),
         path,
         manager: Arc::new(Mutex::new(SessionManager::default())),
         runtime,
@@ -225,11 +235,43 @@ fn build(
     if let Ok(m) = state.manager.lock() {
         m.audio.set_volume(state.preferences.borrow().volume);
     }
+    let automatic = Rc::new(std::cell::Cell::new(false));
+    let changing = automatic.clone();
     let s = state.clone();
+    let sep = separator.clone();
     sidebar_toggle.connect_toggled(move |b| {
         s.sidebar.set_visible(b.is_active());
+        sep.set_visible(b.is_active());
+        if changing.get() {
+            return;
+        }
         s.preferences.borrow_mut().sidebar = b.is_active();
         save_preferences(&s);
+    });
+    let weak_state = Rc::downgrade(&state);
+    let weak_toggle = sidebar_toggle.downgrade();
+    let compact = std::cell::Cell::new(None);
+    state.window.add_tick_callback(move |window, _| {
+        let Some(s) = weak_state.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        let now = window.width() < 900;
+        if compact.get() != Some(now) {
+            compact.set(Some(now));
+            if let Some(toggle) = weak_toggle.upgrade() {
+                automatic.set(true);
+                toggle.set_active(!now && s.preferences.borrow().sidebar);
+                s.sidebar.set_visible(toggle.is_active());
+                separator.set_visible(toggle.is_active());
+                automatic.set(false);
+            }
+        }
+        glib::ControlFlow::Continue
+    });
+    let s = state.clone();
+    back.connect_clicked(move |_| {
+        s.focus.borrow_mut().take();
+        render(&s);
     });
     let s = state.clone();
     library.connect_clicked(move |_| camera::library(&s));
@@ -243,89 +285,6 @@ fn build(
             editor::open(&s, View::default());
         }
     });
-    let s = state.clone();
-    duplicate.connect_clicked(move |_| {
-        if let Some(v) = active_view(&s) {
-            let mut copy = v.duplicate();
-            copy.order = s.views.borrow().len() as i32;
-            persist_view(&s, copy);
-        }
-    });
-    let s = state.clone();
-    favorite.connect_clicked(move |_| {
-        if let Some(mut v) = active_view(&s) {
-            v.favorite = !v.favorite;
-            persist_view(&s, v);
-        }
-    });
-    let s = state.clone();
-    initial.connect_clicked(move |_| {
-        s.preferences.borrow_mut().initial_view = s.current.borrow().clone();
-        save_preferences(&s);
-        s.status.set_text("View definida para a inicialização.");
-    });
-    let s = state.clone();
-    delete.connect_clicked(move |_| {
-        if let Some(v) = active_view(&s) {
-            let s2 = s.clone();
-            confirm(&s.window, "Excluir esta View?", move || {
-                let path = s2.path.clone();
-                let id = v.id.clone();
-                let s3 = s2.clone();
-                jobs::run(
-                    move || Store::open(path)?.delete_view(&id),
-                    move |r: Result<()>| match r {
-                        Ok(()) => {
-                            s3.views.borrow_mut().retain(|x| x.id != v.id);
-                            *s3.current.borrow_mut() =
-                                s3.views.borrow().first().map(|v| v.id.clone());
-                            refresh(&s3);
-                        }
-                        Err(e) => message(&s3.window, &e.to_string()),
-                    },
-                );
-            });
-        }
-    });
-    for (b, delta) in [(up, -1), (down, 1)] {
-        let s = state.clone();
-        b.connect_clicked(move |_| {
-            let list = s.views.borrow().clone();
-            let Some(index) = list
-                .iter()
-                .position(|v| Some(&v.id) == s.current.borrow().as_ref())
-            else {
-                return;
-            };
-            let next = index as i32 + delta;
-            if next < 0 || next >= list.len() as i32 {
-                return;
-            }
-            let mut reordered = list;
-            reordered.swap(index, next as usize);
-            for (i, v) in reordered.iter_mut().enumerate() {
-                v.order = i as i32;
-            }
-            let path = s.path.clone();
-            let s2 = s.clone();
-            jobs::run(
-                move || -> Result<_> {
-                    let store = Store::open(path)?;
-                    for v in &reordered {
-                        store.save_view(v)?;
-                    }
-                    Ok(reordered)
-                },
-                move |r| match r {
-                    Ok(list) => {
-                        *s2.views.borrow_mut() = list;
-                        refresh_sidebar(&s2);
-                    }
-                    Err(e) => message(&s2.window, &e.to_string()),
-                },
-            );
-        });
-    }
     let s = state.clone();
     fullscreen.connect_clicked(move |_| toggle_fullscreen(&s.window));
     let s = state.clone();
@@ -417,10 +376,12 @@ fn build(
     state
 }
 pub(crate) fn button(label: &str, icon: &str) -> gtk::Button {
-    gtk::Button::builder()
+    let button = gtk::Button::builder()
         .icon_name(icon)
         .tooltip_text(label)
-        .build()
+        .build();
+    button.update_property(&[gtk::accessible::Property::Label(label)]);
+    button
 }
 pub(crate) fn margins(widget: &impl IsA<gtk::Widget>, n: i32) {
     widget.set_margin_top(n);
@@ -486,7 +447,7 @@ pub(crate) fn save_preferences(s: &Shared) {
         },
     );
 }
-pub(crate) fn persist_view(s: &Shared, view: View) {
+pub(crate) fn persist_view(s: &Shared, view: View, activate: bool) {
     let path = s.path.clone();
     let s = s.clone();
     jobs::run(
@@ -496,7 +457,10 @@ pub(crate) fn persist_view(s: &Shared, view: View) {
         },
         move |r| match r {
             Ok(v) => {
-                *s.current.borrow_mut() = Some(v.id.clone());
+                if activate {
+                    *s.current.borrow_mut() = Some(v.id.clone());
+                    s.focus.borrow_mut().take();
+                }
                 let mut views = s.views.borrow_mut();
                 if let Some(old) = views.iter_mut().find(|x| x.id == v.id) {
                     *old = v;
@@ -505,7 +469,11 @@ pub(crate) fn persist_view(s: &Shared, view: View) {
                 }
                 views.sort_by_key(|v| v.order);
                 drop(views);
-                refresh(&s);
+                if activate {
+                    refresh(&s);
+                } else {
+                    refresh_sidebar(&s);
+                }
             }
             Err(e) => message(&s.window, &e.to_string()),
         },
@@ -519,21 +487,52 @@ fn refresh_sidebar(s: &Shared) {
     while let Some(c) = s.view_list.first_child() {
         s.view_list.remove(&c);
     }
-    for v in s.views.borrow().iter() {
-        let label = format!("{}{}", if v.favorite { "★  " } else { "" }, v.name);
-        let b = gtk::Button::with_label(&label);
-        b.set_halign(gtk::Align::Fill);
-        if Some(&v.id) == s.current.borrow().as_ref() {
-            b.add_css_class("suggested-action");
+    if let Some(edit) = s.edit_view.upgrade() {
+        edit.set_sensitive(active_view(s).is_some());
+    }
+    let views = s.views.borrow().clone();
+    for (index, v) in views.iter().enumerate() {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let select = gtk::Button::new();
+        select.set_hexpand(true);
+        select.set_tooltip_text(Some(&v.name));
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        let name = gtk::Label::new(Some(&v.name));
+        name.set_xalign(0.);
+        name.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        name.set_max_width_chars(20);
+        content.append(&name);
+        let mut badges = vec![];
+        if v.favorite {
+            badges.push("★ Favorita");
         }
-        let id = v.id.clone();
+        if s.preferences.borrow().initial_view.as_ref() == Some(&v.id) {
+            badges.push("Inicial");
+        }
+        if !badges.is_empty() {
+            let label = gtk::Label::new(Some(&badges.join(" · ")));
+            label.set_xalign(0.);
+            label.add_css_class("dim-label");
+            content.append(&label);
+        }
+        select.set_child(Some(&content));
+        select.update_property(&[gtk::accessible::Property::Label(&format!(
+            "Abrir View {}",
+            v.name
+        ))]);
+        if s.current.borrow().as_ref() == Some(&v.id) {
+            select.add_css_class("suggested-action");
+        }
         let s2 = s.clone();
-        b.connect_clicked(move |_| {
+        let id = v.id.clone();
+        select.connect_clicked(move |_| {
             *s2.current.borrow_mut() = Some(id.clone());
             s2.focus.borrow_mut().take();
             refresh(&s2);
         });
-        s.view_list.append(&b);
+        row.append(&select);
+        row.append(&views::menu(s, v, index));
+        s.view_list.append(&row);
     }
 }
 #[cfg(test)]

@@ -1,14 +1,25 @@
 use super::*;
 pub(crate) fn render(s: &Shared) {
+    let view = active_view(s);
+    let valid_focus = s.focus.borrow().as_ref().is_none_or(|id| {
+        view.as_ref()
+            .is_some_and(|v| v.panels.iter().any(|p| &p.id == id))
+    });
+    if !valid_focus {
+        s.focus.borrow_mut().take();
+    }
+    if let Some(bar) = s.focus_bar.upgrade() {
+        bar.set_visible(s.focus.borrow().is_some());
+    }
     if let Ok(m) = s.manager.lock() {
         m.audio.select(None);
     }
     while let Some(c) = s.grid.first_child() {
         s.grid.remove(&c);
     }
-    let Some(view) = active_view(s) else {
+    let Some(view) = view else {
         empty(
-            &s.grid,
+            s,
             "Seu monitoramento começa aqui",
             "Cadastre uma câmera e crie uma View para acompanhar as imagens.",
         );
@@ -19,9 +30,9 @@ pub(crate) fn render(s: &Shared) {
     save_preferences(s);
     if view.panels.is_empty() {
         empty(
-            &s.grid,
+            s,
             "Esta View está vazia",
-            "Use Editar View para arrastar câmeras para a grade.",
+            "Escolha câmeras no editor para compor seu monitoramento.",
         );
         return;
     }
@@ -58,7 +69,7 @@ pub(crate) fn render(s: &Shared) {
         else {
             continue;
         };
-        let tile = tile(s, &camera, panel.aspect, focus.is_some());
+        let tile = tile(s, &camera, panel.aspect, focus.is_some(), Some(&panel.id));
         let gesture = gtk::GestureClick::new();
         gesture.set_button(1);
         let s2 = s.clone();
@@ -83,7 +94,7 @@ pub(crate) fn render(s: &Shared) {
         }
     }
 }
-fn empty(grid: &gtk::Grid, title: &str, subtitle: &str) {
+fn empty(s: &Shared, title: &str, subtitle: &str) {
     let b = gtk::Box::new(gtk::Orientation::Vertical, 16);
     b.set_valign(gtk::Align::Center);
     b.set_halign(gtk::Align::Center);
@@ -100,13 +111,28 @@ fn empty(grid: &gtk::Grid, title: &str, subtitle: &str) {
     l.set_justify(gtk::Justification::Center);
     l.add_css_class("dim-label");
     b.append(&l);
-    grid.attach(&b, 0, 0, 1, 1);
+    let add = gtk::Button::with_label("Adicionar câmera");
+    add.add_css_class("suggested-action");
+    let s2 = s.clone();
+    add.connect_clicked(move |_| camera::form(&s2, Camera::default(), None));
+    b.append(&add);
+    let view = active_view(s);
+    let next = gtk::Button::with_label(if view.is_some() {
+        "Escolher câmeras"
+    } else {
+        "Criar View"
+    });
+    let s2 = s.clone();
+    next.connect_clicked(move |_| editor::open(&s2, view.clone().unwrap_or_default()));
+    b.append(&next);
+    s.grid.attach(&b, 0, 0, 1, 1);
 }
 pub(crate) fn tile(
     s: &Shared,
     camera: &Camera,
     aspect: cctv_core::Aspect,
     focus: bool,
+    panel_id: Option<&str>,
 ) -> gtk::Box {
     let tile = gtk::Box::new(gtk::Orientation::Vertical, 0);
     tile.set_hexpand(true);
@@ -199,6 +225,46 @@ pub(crate) fn tile(
     let edit = gtk::Button::with_label("Editar View");
     for button in [&configure, &reconnect, &edit] {
         actions.append(button);
+    }
+    if let Some(id) = panel_id {
+        let enlarge = gtk::Button::with_label(if focus {
+            "Voltar à grade"
+        } else {
+            "Ampliar câmera"
+        });
+        let s2 = s.clone();
+        let id = id.to_string();
+        let weak = popover.downgrade();
+        enlarge.connect_clicked(move |_| {
+            if let Some(p) = weak.upgrade() {
+                p.popdown();
+            }
+            *s2.focus.borrow_mut() = if focus { None } else { Some(id.clone()) };
+            render(&s2);
+        });
+        actions.prepend(&enlarge);
+        tile.set_focusable(true);
+        tile.update_property(&[gtk::accessible::Property::Label(&format!(
+            "Painel da câmera {}. Enter para ampliar.",
+            camera.name
+        ))]);
+        let keys = gtk::EventControllerKey::new();
+        let weak_tile = tile.downgrade();
+        let state = Rc::downgrade(s);
+        let id = panel_id.unwrap_or_default().to_string();
+        keys.connect_key_pressed(move |_, key, _, _| {
+            if matches!(key, gdk::Key::Return | gdk::Key::KP_Enter)
+                && weak_tile.upgrade().is_some_and(|t| t.is_focus())
+            {
+                if let Some(s) = state.upgrade() {
+                    *s.focus.borrow_mut() = if focus { None } else { Some(id.clone()) };
+                    render(&s);
+                }
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        tile.add_controller(keys);
     }
     popover.set_child(Some(&actions));
     menu.set_popover(Some(&popover));

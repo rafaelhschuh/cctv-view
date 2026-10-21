@@ -10,10 +10,10 @@ pub(crate) fn open(s: &Shared) {
     d.add_button("Fechar", gtk::ResponseType::Close);
     let area = d.content_area();
     margins(&area, 20);
-    area.append(&gtk::Label::new(Some("Volume da câmera em foco")));
+
     let volume = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0., 100., 1.);
     volume.set_value(s.preferences.borrow().volume * 100.);
-    area.append(&volume);
+    forms::row(&area, "Volume da câmera em foco", &volume);
     let s2 = s.clone();
     let diagnostics = gtk::Button::with_label("Diagnóstico de sessões e recursos");
     area.append(&diagnostics);

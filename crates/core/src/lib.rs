@@ -82,6 +82,57 @@ impl Default for Camera {
     }
 }
 impl Camera {
+    /// The stream URL is the only editable source of video host/port/protocol.
+    pub fn set_stream_url(&mut self, value: &str) -> Result<()> {
+        let value = value.trim();
+        validate_stream(value)?;
+        let url = url::Url::parse(value)?;
+        self.address = url.host_str().unwrap_or_default().into();
+        self.port = url.port().unwrap_or(match url.scheme() {
+            "https" => 443,
+            "http" => 80,
+            _ => 554,
+        });
+        self.protocol = if !self.capabilities.device_url.is_empty() {
+            Protocol::Onvif
+        } else {
+            match url.scheme() {
+                "https" => Protocol::Https,
+                "http" => Protocol::Http,
+                _ => Protocol::Rtsp,
+            }
+        };
+        self.stream_url = value.into();
+        Ok(())
+    }
+    /// Changing a device endpoint must never retain authorization/capabilities of the old device.
+    pub fn set_onvif_endpoint(&mut self, value: &str) -> Result<()> {
+        let value = value.trim();
+        if !value.is_empty() {
+            let u =
+                url::Url::parse(value).map_err(|_| anyhow::anyhow!("Endereço ONVIF inválido."))?;
+            ensure!(
+                value.len() <= 4096
+                    && matches!(u.scheme(), "http" | "https")
+                    && u.host_str().is_some()
+                    && u.username().is_empty()
+                    && u.password().is_none(),
+                "Use um endereço ONVIF HTTP/HTTPS sem credenciais na URL."
+            );
+        }
+        if self.capabilities.device_url != value {
+            self.capabilities = Capabilities {
+                device_url: value.into(),
+                ..Default::default()
+            };
+            self.profiles.clear();
+            self.profile_token = None;
+            self.ptz_allowed = false;
+            self.manufacturer.clear();
+            self.model.clear();
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> Result<()> {
         ensure!(
             !self.name.trim().is_empty() && self.name.len() <= 160,
@@ -230,6 +281,75 @@ impl View {
             }
         }
     }
+    /// Reorganize existing panels transactionally, preserving identities, cameras and aspect.
+    /// Reject smaller layouts that cannot hold all panels instead of silently dropping work.
+    pub fn reflow(&mut self, columns: u8, rows: u8, main: bool) -> Result<()> {
+        ensure!(
+            (1..=16).contains(&columns) && (1..=16).contains(&rows),
+            "Grade inválida."
+        );
+        let mut next = self.clone();
+        next.columns = columns;
+        next.rows = rows;
+        next.panels.clear();
+        for (index, old) in self.panels.iter().enumerate() {
+            let mut p = old.clone();
+            if main && index == 0 {
+                p.width = 2;
+                p.height = 2;
+            }
+            let mut found = None;
+            for y in 0..rows {
+                for x in 0..columns {
+                    p.x = x;
+                    p.y = y;
+                    next.panels.push(p.clone());
+                    let valid = next.validate().is_ok();
+                    next.panels.pop();
+                    if valid {
+                        found = Some(p.clone());
+                        break;
+                    }
+                }
+                if found.is_some() {
+                    break;
+                }
+            }
+            let p=found.ok_or_else(||anyhow::anyhow!("Este layout não comporta todos os painéis. Aumente a grade ou ajuste os tamanhos; nenhuma câmera foi removida."))?;
+            next.panels.push(p);
+        }
+        next.validate()?;
+        *self = next;
+        Ok(())
+    }
+    pub fn add_camera(&mut self, camera_id: &str, position: Option<(u8, u8)>) -> Result<()> {
+        ensure!(!camera_id.is_empty(), "Selecione uma câmera.");
+        let cells: Vec<_> = if let Some(p) = position {
+            vec![p]
+        } else {
+            (0..self.rows)
+                .flat_map(|y| (0..self.columns).map(move |x| (x, y)))
+                .collect()
+        };
+        for (x, y) in cells {
+            let p = Panel {
+                id: id(),
+                camera_id: camera_id.into(),
+                x,
+                y,
+                width: 1,
+                height: 1,
+                aspect: Aspect::Fit,
+            };
+            let mut next = self.clone();
+            next.panels.push(p);
+            if next.validate().is_ok() {
+                *self = next;
+                return Ok(());
+            }
+        }
+        bail!("Não há espaço livre nesta posição. Aumente a grade ou remova um painel.")
+    }
     pub fn duplicate(&self) -> Self {
         let mut v = self.clone();
         v.id = id();
@@ -296,5 +416,55 @@ mod tests {
         let copy = v.duplicate();
         assert_ne!(copy.id, v.id);
         assert_ne!(copy.panels[0].id, v.panels[0].id);
+    }
+}
+
+#[cfg(test)]
+mod ux_regressions {
+    use super::*;
+    #[test]
+    fn endpoint_and_stream_are_consistent() -> Result<()> {
+        let mut c = Camera {
+            name: "Entrada".into(),
+            ..Default::default()
+        };
+        c.set_onvif_endpoint("https://camera.local/onvif/device_service")?;
+        c.set_stream_url(" rtsp://camera.local:8554/live ")?;
+        assert_eq!(c.address, "camera.local");
+        assert_eq!(c.port, 8554);
+        assert_eq!(c.protocol, Protocol::Onvif);
+        c.capabilities.ptz_url = Some("https://camera.local/ptz".into());
+        c.ptz_allowed = true;
+        c.profile_token = Some("old".into());
+        c.set_onvif_endpoint("https://new.local/onvif")?;
+        assert!(c.capabilities.ptz_url.is_none());
+        assert!(!c.ptz_allowed);
+        assert!(c.profile_token.is_none());
+        assert!(c.set_onvif_endpoint("http://u:p@host/onvif").is_err());
+        c.set_onvif_endpoint("")?;
+        c.set_stream_url("https://camera.local/image")?;
+        assert_eq!(c.port, 443);
+        assert_eq!(c.protocol, Protocol::Https);
+        Ok(())
+    }
+    #[test]
+    fn reflow_preserves_panels_and_rejects_data_loss() -> Result<()> {
+        let mut v = View::default();
+        v.add_camera("B", Some((0, 0)))?;
+        v.add_camera("A", Some((1, 0)))?;
+        v.panels[0].aspect = Aspect::Fill;
+        let before = v.panels.clone();
+        v.reflow(3, 3, false)?;
+        for (old, new) in before.iter().zip(&v.panels) {
+            assert_eq!(old.id, new.id);
+            assert_eq!(old.camera_id, new.camera_id);
+            assert_eq!(old.aspect, new.aspect);
+        }
+        let saved = v.clone();
+        assert!(v.reflow(1, 1, false).is_err());
+        assert_eq!(v, saved);
+        assert!(v.add_camera("C", Some((0, 0))).is_err());
+        assert_eq!(v, saved);
+        Ok(())
     }
 }

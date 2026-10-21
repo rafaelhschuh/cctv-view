@@ -24,7 +24,7 @@ impl Controller {
             let _ = c.stop(&t, &p).await;
         });
     }
-    fn start(&self, x: f64, y: f64, z: f64) {
+    fn start(&self, x: f64, y: f64, z: f64) -> u64 {
         let token = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
         let generation = self.generation.clone();
         // One pulse lasts at most 500ms on the device, renewed only while this control remains held.
@@ -60,6 +60,17 @@ impl Controller {
                 }
             },
         );
+        token
+    }
+    /// Keyboard/assistive activation is a bounded pulse, never an unpaired continuous move.
+    fn pulse(&self, x: f64, y: f64, z: f64) {
+        let token = self.start(x, y, z);
+        let c = self.clone();
+        glib::timeout_add_local_once(Duration::from_millis(180), move || {
+            if c.generation.load(Ordering::Acquire) == token {
+                c.stop();
+            }
+        });
     }
 }
 pub fn open(s: &Shared, camera: &Camera) {
@@ -106,7 +117,7 @@ pub fn open(s: &Shared, camera: &Camera) {
                     return;
                 }
             };
-            feedback.set_text("Segure uma direção para mover. Solte para parar.");
+            feedback.set_text("Mouse: segure para mover e solte para parar. Teclado: ative um botão para um movimento curto. Escape para parar.");
             let controller = Controller {
                 runtime,
                 client,
@@ -127,8 +138,7 @@ pub fn open(s: &Shared, camera: &Camera) {
             let speed = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.1, 1., 0.1);
             speed.set_value(0.4);
             speed.set_tooltip_text(Some("Velocidade PTZ"));
-            area.append(&gtk::Label::new(Some("Velocidade")));
-            area.append(&speed);
+            forms::row(&area, "Velocidade PTZ", &speed);
             for (label, col, row, x, y, z) in [
                 ("↖", 0, 0, -1., 1., 0.),
                 ("↑", 1, 0, 0., 1., 0.),
@@ -143,12 +153,36 @@ pub fn open(s: &Shared, camera: &Camera) {
                 ("Zoom +", 2, 3, 0., 0., 1.),
             ] {
                 let b = gtk::Button::with_label(label);
-                b.set_size_request(70, 42);
+                let accessible = match label {
+                    "↖" => "Mover para cima e esquerda",
+                    "↑" => "Mover para cima",
+                    "↗" => "Mover para cima e direita",
+                    "←" => "Mover para esquerda",
+                    "■" => "Parar movimento",
+                    "→" => "Mover para direita",
+                    "↙" => "Mover para baixo e esquerda",
+                    "↓" => "Mover para baixo",
+                    "↘" => "Mover para baixo e direita",
+                    "Zoom −" => "Diminuir zoom óptico",
+                    _ => "Aumentar zoom óptico",
+                };
+                b.set_tooltip_text(Some(accessible));
+                b.update_property(&[gtk::accessible::Property::Label(accessible)]);
+                if label == "■" {
+                    b.set_label("Parar");
+                    b.add_css_class("destructive-action");
+                }
+                b.set_size_request(70, 44);
                 grid.attach(&b, col, row, 1, 1);
+                let pointer_used = Rc::new(std::cell::Cell::new(false));
                 let gesture = gtk::GestureClick::new();
+                gesture.set_button(1);
+                let pointer = pointer_used.clone();
                 let c = controller.clone();
                 let speed = speed.clone();
+                let click_speed = speed.clone();
                 gesture.connect_pressed(move |_, _, _, _| {
+                    pointer.set(true);
                     if x == 0. && y == 0. && z == 0. {
                         c.stop();
                     } else {
@@ -159,11 +193,27 @@ pub fn open(s: &Shared, camera: &Camera) {
                 let c = controller.clone();
                 gesture.connect_released(move |_, _, _, _| c.stop());
                 let c = controller.clone();
-                gesture.connect_cancel(move |_, _| c.stop());
+                let pointer = pointer_used.clone();
+                gesture.connect_cancel(move |_, _| {
+                    pointer.set(false);
+                    c.stop();
+                });
+                let c = controller.clone();
+                b.connect_clicked(move |_| {
+                    if pointer_used.replace(false) {
+                        return;
+                    }
+                    if x == 0. && y == 0. && z == 0. {
+                        c.stop();
+                    } else {
+                        let v = click_speed.value();
+                        c.pulse(x * v, y * v, z * v);
+                    }
+                });
                 b.add_controller(gesture);
             }
             let presets = gtk::DropDown::from_strings(&[]);
-            area.append(&presets);
+            forms::row(&area, "Posição salva", &presets);
             let tokens = Rc::new(RefCell::new(Vec::<cctv_onvif::Preset>::new()));
             let line = gtk::Box::new(gtk::Orientation::Horizontal, 8);
             let load = gtk::Button::with_label("Consultar presets");
@@ -230,7 +280,7 @@ pub fn open(s: &Shared, camera: &Camera) {
                 .hexpand(true)
                 .build();
             let save = gtk::Button::with_label("Salvar posição");
-            line.append(&name);
+            forms::row(&area, "Nome do novo preset", &name);
             line.append(&save);
             area.append(&line);
             let c = controller.clone();
@@ -270,13 +320,35 @@ pub fn open(s: &Shared, camera: &Camera) {
             let keys = gtk::EventControllerKey::new();
             let c = controller.clone();
             let speed2 = speed.clone();
+            let weak_window = d.downgrade();
             keys.connect_key_pressed(move |_, key, _, _| {
+                if key != gdk::Key::Escape
+                    && weak_window
+                        .upgrade()
+                        .and_then(|d| gtk::prelude::RootExt::focus(&d))
+                        .is_some_and(|w| {
+                            std::iter::successors(Some(w), |w| w.parent()).any(|w| {
+                                w.is::<gtk::Entry>()
+                                    || w.is::<gtk::SpinButton>()
+                                    || w.is::<gtk::Scale>()
+                                    || w.is::<gtk::DropDown>()
+                            })
+                        })
+                {
+                    return glib::Propagation::Proceed;
+                }
                 let v = speed2.value();
-                let (x, y) = match key {
-                    gdk::Key::Up => (0., v),
-                    gdk::Key::Down => (0., -v),
-                    gdk::Key::Left => (-v, 0.),
-                    gdk::Key::Right => (v, 0.),
+                let (x, y, z) = match key {
+                    gdk::Key::Up => (0., v, 0.),
+                    gdk::Key::Down => (0., -v, 0.),
+                    gdk::Key::Left => (-v, 0., 0.),
+                    gdk::Key::Right => (v, 0., 0.),
+                    gdk::Key::Home => (-v, v, 0.),
+                    gdk::Key::Page_Up => (v, v, 0.),
+                    gdk::Key::End => (-v, -v, 0.),
+                    gdk::Key::Page_Down => (v, -v, 0.),
+                    gdk::Key::plus | gdk::Key::KP_Add => (0., 0., v),
+                    gdk::Key::minus | gdk::Key::KP_Subtract => (0., 0., -v),
                     gdk::Key::Escape => {
                         c.stop();
                         return glib::Propagation::Stop;
@@ -284,7 +356,7 @@ pub fn open(s: &Shared, camera: &Camera) {
                     _ => return glib::Propagation::Proceed,
                 };
                 if !c.held.load(Ordering::Acquire) {
-                    c.start(x, y, 0.);
+                    c.start(x, y, z);
                 }
                 glib::Propagation::Stop
             });

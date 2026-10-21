@@ -7,6 +7,11 @@ struct Editor {
     grid: gtk::Grid,
     feedback: gtk::Label,
     preview: Rc<std::cell::Cell<bool>>,
+    history: Rc<RefCell<Vec<View>>>,
+    undo: glib::WeakRef<gtk::Button>,
+    window: glib::WeakRef<gtk::Dialog>,
+    columns: gtk::SpinButton,
+    rows: gtk::SpinButton,
 }
 pub fn open(s: &Shared, view: View) {
     let d = gtk::Dialog::builder()
@@ -23,13 +28,19 @@ pub fn open(s: &Shared, view: View) {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
     margins(&root, 16);
     d.content_area().append(&root);
-    let top = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     let name = gtk::Entry::builder()
         .text(&view.name)
         .placeholder_text("Nome da View")
         .hexpand(true)
         .build();
-    top.append(&name);
+    forms::row(&root, "Nome da View", &name);
+    let layout = gtk::FlowBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .min_children_per_line(2)
+        .max_children_per_line(4)
+        .column_spacing(12)
+        .row_spacing(8)
+        .build();
     let preset = gtk::DropDown::from_strings(&[
         "Personalizado",
         "1 câmera",
@@ -39,41 +50,45 @@ pub fn open(s: &Shared, view: View) {
         "4 × 4",
         "Principal + secundárias",
     ]);
-    top.append(&preset);
     let columns = gtk::SpinButton::with_range(1., 16., 1.);
     columns.set_value(view.columns as f64);
-    columns.set_tooltip_text(Some("Colunas"));
-    top.append(&gtk::Label::new(Some("Colunas")));
-    top.append(&columns);
     let rows = gtk::SpinButton::with_range(1., 16., 1.);
     rows.set_value(view.rows as f64);
-    rows.set_tooltip_text(Some("Linhas"));
-    top.append(&gtk::Label::new(Some("Linhas")));
-    top.append(&rows);
+    for (label, control) in [
+        ("Layout", preset.clone().upcast::<gtk::Widget>()),
+        ("Colunas", columns.clone().upcast()),
+        ("Linhas", rows.clone().upcast()),
+    ] {
+        let group = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        forms::row(&group, label, &control);
+        layout.insert(&group, -1);
+    }
+    let resize = gtk::Button::with_label("Aplicar grade");
+    resize.set_valign(gtk::Align::End);
+    layout.insert(&resize, -1);
+    root.append(&layout);
+    let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let undo = gtk::Button::with_label("Desfazer layout");
+    undo.set_sensitive(false);
+    let fill = gtk::Button::with_label("Preencher espaços");
+    fill.set_tooltip_text(Some(
+        "Adicionar câmeras ainda não usadas, sem substituir os painéis existentes",
+    ));
     let preview = gtk::ToggleButton::with_label("Visualizar");
-    top.append(&preview);
-    root.append(&top);
-    let content = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+    toolbar.append(&undo);
+    toolbar.append(&fill);
+    toolbar.append(&preview);
+    root.append(&toolbar);
+    let content = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     content.set_vexpand(true);
     root.append(&content);
     let library = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    library.set_width_request(180);
-    library.append(&gtk::Label::new(Some("ARRASTE PARA A GRADE")));
-    for c in s.cameras.borrow().iter() {
-        let b = gtk::Button::with_label(&c.name);
-        b.set_tooltip_text(Some("Arraste para adicionar uma câmera"));
-        let drag = gtk::DragSource::new();
-        drag.set_actions(gdk::DragAction::COPY);
-        let id = format!("camera:{}", c.id);
-        drag.connect_prepare(move |_, _, _| Some(gdk::ContentProvider::for_value(&id.to_value())));
-        b.add_controller(drag);
-        library.append(&b);
-    }
-    let scroll = gtk::ScrolledWindow::builder()
-        .child(&library)
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .build();
-    content.append(&scroll);
+    library.set_width_request(160);
+    forms::section(&library, "Câmeras");
+    forms::help(
+        &library,
+        "Clique para adicionar ao primeiro espaço livre ou arraste até uma célula.",
+    );
     let grid = gtk::Grid::builder()
         .column_homogeneous(true)
         .row_homogeneous(true)
@@ -82,18 +97,60 @@ pub fn open(s: &Shared, view: View) {
         .hexpand(true)
         .vexpand(true)
         .build();
-    content.append(&grid);
-    let feedback=gtk::Label::new(Some("Arraste câmeras ou painéis. Clique no painel para trocar câmera, proporção, posição e tamanho. Arraste ↘ para redimensionar."));
+    let feedback = gtk::Label::new(Some(
+        "Clique em + para escolher uma câmera. Clique num painel para editar suas propriedades.",
+    ));
     feedback.set_wrap(true);
     feedback.set_xalign(0.);
-    root.append(&feedback);
+    feedback.set_max_width_chars(80);
     let editor = Editor {
         state: s.clone(),
         draft: Rc::new(RefCell::new(view)),
         grid,
         feedback,
         preview: Rc::new(std::cell::Cell::new(false)),
+        history: Rc::new(RefCell::new(vec![])),
+        undo: undo.downgrade(),
+        window: d.downgrade(),
+        columns: columns.clone(),
+        rows: rows.clone(),
     };
+    for c in s.cameras.borrow().iter() {
+        let b = gtk::Button::with_label(&c.name);
+        b.set_tooltip_text(Some(&format!(
+            "Adicionar {} ao primeiro espaço livre",
+            c.name
+        )));
+        if let Some(label) = b.child().and_then(|w| w.downcast::<gtk::Label>().ok()) {
+            label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            label.set_max_width_chars(20);
+        }
+        let drag = gtk::DragSource::new();
+        drag.set_actions(gdk::DragAction::COPY);
+        let data = format!("camera:{}", c.id);
+        drag.connect_prepare(move |_, _, _| {
+            Some(gdk::ContentProvider::for_value(&data.to_value()))
+        });
+        b.add_controller(drag);
+        let e = editor.clone();
+        let id = c.id.clone();
+        b.connect_clicked(move |_| add_camera(&e, &id, None));
+        library.append(&b);
+    }
+    let library_scroll = gtk::ScrolledWindow::builder()
+        .child(&library)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .build();
+    content.append(&library_scroll);
+    let canvas_scroll = gtk::ScrolledWindow::builder()
+        .child(&editor.grid)
+        .hexpand(true)
+        .vexpand(true)
+        .min_content_width(240)
+        .min_content_height(160)
+        .build();
+    content.append(&canvas_scroll);
+    root.append(&editor.feedback);
     draw(&editor);
     let e = editor.clone();
     preset.connect_selected_notify(move |p| {
@@ -106,45 +163,60 @@ pub fn open(s: &Shared, view: View) {
             6 => (3, 3, true),
             _ => return,
         };
-        let ids: Vec<_> = e
-            .state
-            .cameras
-            .borrow()
-            .iter()
-            .map(|c| c.id.clone())
-            .collect();
-        e.draft.borrow_mut().preset(c, r, &ids, main);
-        columns.set_value(c as f64);
-        rows.set_value(r as f64);
-        draw(&e);
-    });
-    // Grid dimensions are applied explicitly to avoid destroying panels on intermediate spin changes.
-    let resize = gtk::Button::with_label("Aplicar grade");
-    top.append(&resize);
-    // Locate the numeric controls already parented in the toolbar; retain their typed handles.
-    let numeric: Vec<gtk::SpinButton> = children(&top)
-        .into_iter()
-        .filter_map(|w| w.downcast().ok())
-        .collect();
-    let e = editor.clone();
-    resize.connect_clicked(move |_| {
-        if numeric.len() != 2 {
-            return;
-        }
-        let mut candidate = e.draft.borrow().clone();
-        candidate.columns = numeric[0].value_as_int() as u8;
-        candidate.rows = numeric[1].value_as_int() as u8;
-        match candidate.validate() {
+        let mut v = e.draft.borrow().clone();
+        match v.reflow(c, r, main) {
             Ok(()) => {
-                *e.draft.borrow_mut() = candidate;
-                draw(&e);
+                apply(&e, v);
             }
-            Err(err) => e.feedback.set_text(&err.to_string()),
+            Err(err) => {
+                e.feedback.set_text(&err.to_string());
+                p.set_selected(0);
+            }
+        }
+    });
+    let e = editor.clone();
+    let layout_choice = preset.clone();
+    resize.connect_clicked(move |_| {
+        let mut v = e.draft.borrow().clone();
+        v.columns = e.columns.value_as_int() as u8;
+        v.rows = e.rows.value_as_int() as u8;
+        apply(&e, v);
+        layout_choice.set_selected(0);
+    });
+    let e = editor.clone();
+    fill.connect_clicked(move |_| {
+        let mut v = e.draft.borrow().clone();
+        let mut added = 0;
+        for c in e.state.cameras.borrow().iter() {
+            if !v.panels.iter().any(|p| p.camera_id == c.id) && v.add_camera(&c.id, None).is_ok() {
+                added += 1;
+            }
+        }
+        if added > 0 {
+            apply(&e, v);
+        } else {
+            e.feedback
+                .set_text("Nenhuma câmera disponível para os espaços livres.");
+        }
+    });
+    let e = editor.clone();
+    let layout_choice = preset.clone();
+    undo.connect_clicked(move |_| {
+        let previous = e.history.borrow_mut().pop();
+        if let Some(v) = previous {
+            *e.draft.borrow_mut() = v;
+            draw(&e);
+            layout_choice.set_selected(0);
+            e.feedback.set_text("Última alteração de layout desfeita.");
         }
     });
     let e = editor.clone();
     preview.connect_toggled(move |button| {
-        e.preview.set(button.is_active());
+        let active = button.is_active();
+        e.preview.set(active);
+        layout.set_sensitive(!active);
+        fill.set_sensitive(!active);
+        library.set_sensitive(!active);
         draw(&e);
     });
     let e = editor.clone();
@@ -182,6 +254,9 @@ pub fn open(s: &Shared, view: View) {
             },
             move |r| match r {
                 Ok(view) => {
+                    if s2.current.borrow().as_ref() != Some(&view.id) {
+                        s2.focus.borrow_mut().take();
+                    }
                     *s2.current.borrow_mut() = Some(view.id.clone());
                     let mut views = s2.views.borrow_mut();
                     if let Some(old) = views.iter_mut().find(|v| v.id == view.id) {
@@ -202,20 +277,16 @@ pub fn open(s: &Shared, view: View) {
     });
     d.present();
 }
-fn children(w: &gtk::Box) -> Vec<gtk::Widget> {
-    let mut result = vec![];
-    let mut next = w.first_child();
-    while let Some(c) = next {
-        next = c.next_sibling();
-        result.push(c);
-    }
-    result
-}
 fn draw(e: &Editor) {
     while let Some(c) = e.grid.first_child() {
         e.grid.remove(&c);
     }
     let view = e.draft.borrow().clone();
+    e.columns.set_value(view.columns as f64);
+    e.rows.set_value(view.rows as f64);
+    if let Some(undo) = e.undo.upgrade() {
+        undo.set_sensitive(!e.history.borrow().is_empty());
+    }
     let preview = e.preview.get();
     for y in 0..view.rows {
         for x in 0..view.columns {
@@ -227,11 +298,18 @@ fn draw(e: &Editor) {
                 continue;
             }
             let b = gtk::Button::with_label("+");
-            b.set_tooltip_text(Some("Solte uma câmera aqui"));
+            b.set_tooltip_text(Some("Clique para escolher uma câmera ou arraste até aqui"));
             b.set_hexpand(true);
             b.set_vexpand(true);
             b.set_size_request(50, 45);
             b.set_sensitive(!preview);
+            let e2 = e.clone();
+            b.update_property(&[gtk::accessible::Property::Label(&format!(
+                "Adicionar câmera na coluna {}, linha {}",
+                x + 1,
+                y + 1
+            ))]);
+            b.connect_clicked(move |_| choose_camera(&e2, (x, y)));
             drop_target(e, &b, x, y);
             e.grid.attach(&b, x as i32, y as i32, 1, 1);
         }
@@ -246,7 +324,7 @@ fn draw(e: &Editor) {
             .cloned();
         if preview {
             if let Some(c) = camera {
-                let t = tile(&e.state, &c, p.aspect, false);
+                let t = tile(&e.state, &c, p.aspect, false, None);
                 e.grid
                     .attach(&t, p.x as i32, p.y as i32, p.width as i32, p.height as i32);
             }
@@ -307,6 +385,14 @@ fn draw(e: &Editor) {
 fn apply(e: &Editor, v: View) -> bool {
     match v.validate() {
         Ok(()) => {
+            let old = e.draft.borrow().clone();
+            if old != v {
+                let mut h = e.history.borrow_mut();
+                if h.len() == 20 {
+                    h.remove(0);
+                }
+                h.push(old);
+            }
             *e.draft.borrow_mut() = v;
             e.feedback
                 .set_text("Layout atualizado. Salve a View para manter as alterações.");
@@ -326,6 +412,9 @@ fn drop_target(e: &Editor, widget: &impl IsA<gtk::Widget>, x: u8, y: u8) {
     );
     let e = e.clone();
     target.connect_drop(move |_, value, _, _| {
+        if e.preview.get() {
+            return false;
+        }
         let Ok(text) = value.get::<String>() else {
             return false;
         };
@@ -375,7 +464,12 @@ fn panel_settings(e: &Editor, id: &str) {
         return;
     };
     let d = gtk::Dialog::builder()
-        .transient_for(&e.state.window)
+        .transient_for(
+            &e.window
+                .upgrade()
+                .map(|w| w.upcast::<gtk::Window>())
+                .unwrap_or_else(|| e.state.window.clone().upcast()),
+        )
         .destroy_with_parent(true)
         .modal(true)
         .title("Configurar painel")
@@ -398,7 +492,7 @@ fn panel_settings(e: &Editor, id: &str) {
             .position(|c| c.id == p.camera_id)
             .unwrap_or(0) as u32,
     );
-    grid.attach(&gtk::Label::new(Some("Câmera")), 0, 0, 1, 1);
+    grid.attach(&forms::label(&dropdown, "Câmera"), 0, 0, 1, 1);
     grid.attach(&dropdown, 1, 0, 1, 1);
     let aspect =
         gtk::DropDown::from_strings(&["Manter proporção", "Preencher e recortar", "Esticar"]);
@@ -407,24 +501,35 @@ fn panel_settings(e: &Editor, id: &str) {
         Aspect::Fill => 1,
         Aspect::Stretch => 2,
     });
-    grid.attach(&gtk::Label::new(Some("Imagem")), 0, 1, 1, 1);
+    grid.attach(&forms::label(&aspect, "Imagem"), 0, 1, 1, 1);
     grid.attach(&aspect, 1, 1, 1, 1);
     let mut controls = vec![];
     for (i, (label, value, min)) in [
-        ("Coluna", p.x, 0.),
-        ("Linha", p.y, 0.),
+        ("Coluna", p.x + 1, 1.),
+        ("Linha", p.y + 1, 1.),
         ("Largura", p.width, 1.),
         ("Altura", p.height, 1.),
     ]
     .into_iter()
     .enumerate()
     {
-        let spin = gtk::SpinButton::with_range(min, 16., 1.);
+        let max = if i == 0 || i == 2 {
+            view.columns
+        } else {
+            view.rows
+        };
+        let spin = gtk::SpinButton::with_range(min, f64::from(max), 1.);
         spin.set_value(value as f64);
-        grid.attach(&gtk::Label::new(Some(label)), 0, i as i32 + 2, 1, 1);
+        grid.attach(&forms::label(&spin, label), 0, i as i32 + 2, 1, 1);
         grid.attach(&spin, 1, i as i32 + 2, 1, 1);
         controls.push(spin);
     }
+    let error = gtk::Label::new(None);
+    error.set_wrap(true);
+    error.set_max_width_chars(45);
+    error.set_xalign(0.);
+    error.add_css_class("error");
+    grid.attach(&error, 0, 6, 2, 1);
     let e = e.clone();
     let id = id.to_string();
     d.connect_response(move |d, r| {
@@ -440,8 +545,8 @@ fn panel_settings(e: &Editor, id: &str) {
                     if let Some(c) = cameras.get(dropdown.selected() as usize) {
                         p.camera_id = c.id.clone();
                     }
-                    p.x = controls[0].value_as_int() as u8;
-                    p.y = controls[1].value_as_int() as u8;
+                    p.x = (controls[0].value_as_int() - 1) as u8;
+                    p.y = (controls[1].value_as_int() - 1) as u8;
                     p.width = controls[2].value_as_int() as u8;
                     p.height = controls[3].value_as_int() as u8;
                     p.aspect = match aspect.selected() {
@@ -449,6 +554,11 @@ fn panel_settings(e: &Editor, id: &str) {
                         2 => Aspect::Stretch,
                         _ => Aspect::Fit,
                     };
+                }
+                if let Err(err) = v.validate() {
+                    error.set_text(&err.to_string());
+                    controls[0].grab_focus();
+                    return;
                 }
                 if apply(&e, v) {
                     d.close();
@@ -464,4 +574,61 @@ fn clear_grid(grid: &gtk::Grid) {
     while let Some(child) = grid.first_child() {
         grid.remove(&child);
     }
+}
+
+fn add_camera(e: &Editor, id: &str, position: Option<(u8, u8)>) {
+    if e.preview.get() {
+        return;
+    }
+    let mut v = e.draft.borrow().clone();
+    match v.add_camera(id, position) {
+        Ok(()) => {
+            apply(e, v);
+        }
+        Err(err) => e.feedback.set_text(&err.to_string()),
+    }
+}
+fn choose_camera(e: &Editor, position: (u8, u8)) {
+    if e.preview.get() {
+        return;
+    }
+    let parent = e
+        .window
+        .upgrade()
+        .map(|w| w.upcast::<gtk::Window>())
+        .unwrap_or_else(|| e.state.window.clone().upcast());
+    let d = gtk::Dialog::builder()
+        .transient_for(&parent)
+        .destroy_with_parent(true)
+        .modal(true)
+        .title("Escolher câmera")
+        .default_width(380)
+        .default_height(300)
+        .build();
+    d.add_button("Cancelar", gtk::ResponseType::Cancel);
+    let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    margins(&list, 16);
+    if e.state.cameras.borrow().is_empty() {
+        forms::help(&list,"Nenhuma câmera cadastrada. Cadastre uma câmera na biblioteca antes de adicioná-la à View.");
+    }
+    for c in e.state.cameras.borrow().iter() {
+        let b = gtk::Button::with_label(&c.name);
+        let e = e.clone();
+        let id = c.id.clone();
+        let weak = d.downgrade();
+        b.connect_clicked(move |_| {
+            add_camera(&e, &id, Some(position));
+            if let Some(d) = weak.upgrade() {
+                d.close();
+            }
+        });
+        list.append(&b);
+    }
+    let scroll = gtk::ScrolledWindow::builder()
+        .child(&list)
+        .vexpand(true)
+        .build();
+    d.content_area().append(&scroll);
+    d.connect_response(|d, _| d.close());
+    d.present();
 }
