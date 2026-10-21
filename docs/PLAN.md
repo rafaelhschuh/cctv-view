@@ -17,3 +17,6 @@ Compactar feedback vazio, remover mensagem Pronto e alinhar Views. Adicionar tip
 
 ## Correção de densidade da lista (0.1.3)
 Remover a altura fixa e o subtítulo vazio introduzidos em 0.1.2; integrar nome/menu em uma linha GTK selecionável e preservar foco. Validar uma/várias Views com nomes longos e indicadores, temas claro/escuro, seleção/ativação e AppImage; somente commit local.
+
+## Acesso e certificado (0.1.4)
+Adicionar Sem credenciais em Conexão e validação de certificado configurável em Avançado. Persistir com defaults compatíveis, aplicar no player/ONVIF/PTZ, preservar segredo sem acessá-lo no modo público, validar HTTPS por padrão e com exceção explícita. Regressões GTK, JSON legado e simulador HTTPS/SOAP; atualizar AppImage e commits locais.

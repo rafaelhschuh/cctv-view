@@ -15,10 +15,16 @@ ONVIF continua sendo um serviço de controle independente. O seletor persiste `s
 | Tipo | URL e opções | Reprodução |
 |---|---|---|
 | RTSP | rtsp://; TCP/UDP, timeout, substream, áudio e aceleração | Entrada RTSP libav |
-| HTTP(S) | http(s)://; timeout, substream, áudio e aceleração | Detecção automática de vídeo/HLS; TLS sempre validado |
+| HTTP(S) | http(s)://; timeout, substream, áudio e aceleração | Detecção automática de vídeo/HLS; TLS validado por padrão, configurável por câmera |
 | MJPEG | http(s)://; multipart ou contínuo, timeout | Demuxer mpjpeg ou mjpeg; sem áudio/substream |
 | JPEG | http(s)://; atualização de 200–60000 ms, timeout | Demuxer jpeg_pipe, uma imagem por requisição; intervalo após recebimento, sem áudio/substream |
 
 JPEG mantém a última imagem enquanto aguarda o intervalo, libera a conexão após cada imagem e cancela espera/I/O ao encerrar. Falhas usam backoff; após sucesso, retorna ao intervalo configurado. A taxa efetiva inclui tempo de rede e decodificação. A configuração participa da chave da sessão compartilhada. Cadastros anteriores usam Auto com detecção existente até serem editados; `snapshot_interval_ms` tem padrão 1000 e `mjpeg_multipart` tem padrão true.
 
 Testes nativos recebem múltiplos frames reais de multipart/contínuo e confirmam requisições JPEG espaçadas, estado Playing entre atualizações e ausência de novas requisições após shutdown. Não constituem homologação de fabricante.
+
+## Acesso público e certificado (0.1.4)
+
+**Conexão → Sem credenciais** oculta os campos de usuário/senha e usa acesso anônimo, incluindo teste de vídeo, ONVIF e PTZ. Nenhum segredo salvo é enviado ou lido enquanto esse modo está ativo. Os dados anteriores permanecem no chaveiro para reativação; Remover credenciais do chaveiro ao salvar continua sendo uma ação explícita separada. Streams públicas podem usar RTSP, HTTP(S), MJPEG ou JPEG.
+
+**Avançado → Segurança HTTPS → Validar certificado HTTPS** começa marcado. Desmarcar aceita certificados autoassinados/inválidos para aquela câmera tanto no player quanto nos clientes ONVIF/PTZ. A flag integra a chave das sessões, assim como o modo sem credenciais; configurações diferentes não compartilham sessão. Testes no simulador confirmam recusa padrão, aceitação explícita em TS/HLS/JPEG e SOAP e nova recusa em uma configuração padrão.

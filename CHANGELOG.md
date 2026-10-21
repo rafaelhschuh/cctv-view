@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 — 2026-10-21
+
+- Opção Validar certificado HTTPS em Avançado, marcada por padrão e configurável por câmera. Aplicada ao player, teste de vídeo, consulta ONVIF e PTZ; certificado autoassinado aceito ao desmarcar, sem alterar o padrão das outras câmeras.
+- Opção Sem credenciais em Conexão para streams públicas: oculta usuário/senha, não envia autenticação nem acessa o chaveiro durante reprodução/consulta/PTZ. Credenciais salvas são preservadas, com remoção explícita separada; reativar autenticação carrega o chaveiro em worker.
+- Campos persistidos com defaults compatíveis para cadastros antigos. Regressões de persistência/GTK e HTTPS TS/HLS/JPEG/SOAP, incluindo recusa padrão após usar a exceção; AppImage atualizado.
+
 ## 0.1.3 — 2026-10-21
 
 - Corrigida a regressão de densidade da lista de Views: removidos altura fixa de 60 px, subtítulo vazio e botão de seleção separado.

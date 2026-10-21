@@ -13,3 +13,5 @@ Excluir câmera remove seus painéis de todas as Views na mesma transação. sav
 O segredo nunca integra o JSON Camera. libsecret guarda uma tupla usuário/senha sob o atributo camera. Bancos e chaveiros são recursos distintos: alterações não são uma transação distribuída; uma falha entre os dois pode deixar um segredo órfão, mas não faz fallback para texto puro. Faça backup do banco fechado ou pela API SQLite; copiar apenas cctv.db com WAL ativo não é um backup seguro.
 
 A partir de 0.1.2, Camera inclui stream_kind, snapshot_interval_ms e mjpeg_multipart. Os defaults serde preservam JSONs anteriores como Auto/1000/true; roundtrip legado testado. O esquema SQL continua na migração 1 e não apaga/regrava registros para introduzir esses campos.
+
+Em 0.1.4, no_credentials (padrão false) e tls_verify (padrão true) são persistidos no JSON Camera. Defaults serde mantêm registros antigos autenticados conforme a referência existente e certificados validados. No modo anônimo, a referência ao chaveiro é preservada sem carregá-la; somente a opção explícita de remoção a apaga.

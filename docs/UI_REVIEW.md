@@ -59,3 +59,13 @@ A regressão GTK cobre uma View simples, várias Views, nome longo, favorita, se
 ![Uma View no tema escuro, sem altura vazia](screenshots/view-single-dark.png)
 
 ![Lista compacta com menu e favorita na mesma linha](screenshots/views-compact-dark.png)
+
+## Acesso público e certificado — 0.1.4
+
+Conexão inclui Sem credenciais: campos privados ficam ocultos/desabilitados e os fluxos de reprodução, teste, consulta e PTZ ignoram o chaveiro. A referência ao segredo é preservada para reativação; remover continua uma ação explícita. Avançado inclui Segurança HTTPS com Validar certificado HTTPS, marcado por padrão e configurável por câmera. A flag é aplicada tanto no libav quanto no cliente ONVIF/PTZ.
+
+GTK verifica alternância dos controles, flags salvas e uso público com referências fictícias de chaveiro sem consulta a Secret Service. O teste nativo de desafio HTTP garante que o modo anônimo não envia Authorization mesmo recebendo Credentials; o controle autenticado usa as mesmas credenciais com sucesso. HTTPS autoassinado TS/HLS/JPEG e SOAP são aceitos apenas com a exceção explícita; configurações padrão continuam recusando. Checks, 18 testes padrão, regressão GTK e smoke do AppImage 0.1.4 passaram.
+
+![Stream pública sem campos de credenciais](screenshots/public-stream.png)
+
+![Validação de certificado configurável em Avançado](screenshots/certificate-option.png)

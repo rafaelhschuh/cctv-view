@@ -34,3 +34,11 @@ O teste GTK mede a distância entre área de abas e Salvar com feedback vazio, c
 ## Lista nativa 0.1.3
 
 O teste GTK cobre uma View sem indicadores e várias com favorito/nome longo, verifica alturas uniformes de até 48 px, seleção da View atual, ativação da segunda linha e preservação do foco nessa linha. `CCTV_TEST_DARK=1` ativa a preferência GTK de tema escuro para repetir o teste e as capturas. A captura 14-single-view reproduz o caso da imagem reportada. Não substitui teste humano de leitor de tela/Wayland/HiDPI.
+
+## Credenciais e certificado 0.1.4
+
+A regressão GTK marca Sem credenciais com usuário preenchido, verifica os campos desabilitados, reativa/desativa a autenticação, desmarca validação TLS e confere flags no SQLite. Salva e reproduz uma câmera pública com referência fictícia de segredo sem acessar Secret Service; PTZ também abre/aciona o mock com referência fictícia ignorada. O roundtrip legado confirma no_credentials=false e tls_verify=true quando campos estão ausentes.
+
+O simulador de protocolos testa certificado autoassinado recusado por padrão, vídeo TS/HLS/JPEG aceito com --no-verify-tls e nova recusa sem a flag; ONVIF HTTPS também é recusado por padrão e aceito explicitamente. A probe pública usa --no-credentials com Credentials não vazio fornecido pelo chamador. Esses flags pertencem somente aos executáveis de teste; no aplicativo, as opções são armazenadas por câmera. Capturas 02-camera-connection e 15-tls-options registram os controles no GTK real.
+
+`anonymous_mode_never_answers_auth_challenge` recebe Credentials não vazio e verifica que um desafio HTTP 401/Basic não recebe Authorization no modo anônimo. Como controle, as mesmas credenciais autenticam e recebem um frame ao desativar o modo. Suíte padrão atual: 18 testes.

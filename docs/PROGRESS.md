@@ -16,7 +16,7 @@ ADR 0001 registra a fronteira Rust/C das bibliotecas nativas, GDK MemoryTexture 
 
 - Auditoria cargo-audit 0.22.2: quick-xml atualizado para 0.42.0 após dois avisos; auditoria final com zero vulnerabilidades/avisos em 255 dependências. Parser reforçado e regressões repetidas.
 - `cargo fmt --all -- --check`, Clippy com `-D warnings`, suíte workspace e release passaram via `scripts/check.sh`.
-- Suíte padrão: 17 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
+- Suíte padrão: 18 testes passam; três testes dependentes de serviços/display ficam ignorados no comando padrão e foram executados separadamente.
 - Mídia: quatro sessões H.264/AAC HTTP simultâneas, JPEG, frame BGRA real, descarte, reconexão após EOF e shutdown.
 - `scripts/test-protocols.sh`: HTTP TS, JPEG, MJPEG, HLS, HEVC, RTSP TCP com autenticação; senha errada, porta fechada e TLS não confiável rejeitados. SOAP autenticado validou informações, capacidades, perfil/URI, movimento/Stop e presets.
 - Descoberta: teste UDP local valida resposta correlacionada, deduplicação e recusa de endereço inválido/resposta não relacionada.
@@ -57,3 +57,11 @@ A reserva de subtítulo e a altura de 60 px introduzidas em 0.1.2 pioraram a lis
 Logs desta etapa: /tmp/cctv-list-check.log, /tmp/cctv-list-light.log, /tmp/cctv-list-dark.log, /tmp/cctv-list-appimage-build.log e /tmp/cctv-list-appimage-smoke.log. Próxima homologação permanece H01/H02; somente commits locais.
 
 Validação 0.1.3: scripts/check.sh passou (17 testes padrão, fmt, Clippy e release); regressão GTK repetida em claro e escuro passou, incluindo foco preservado. AppImage gerado e smoke por extração/Xvfb com dados temporários passou; checksum conferido.
+
+## Certificado e streams públicas 0.1.4
+
+Sem credenciais na aba Conexão oculta/desabilita os campos e pula o chaveiro na reprodução, consulta ONVIF e PTZ; o player também ignora Credentials recebidos do chamador. A referência ao segredo é preservada sem leitura e pode ser removida pela ação explícita existente. Reativar autenticação carrega o segredo em worker. Validar certificado HTTPS na aba Avançado fica marcado por padrão, mas pode ser desmarcado por câmera e vale para vídeo, teste de conexão, ONVIF e PTZ. Campos serde preservam defaults seguros em JSON legado; as flags integram a chave das sessões.
+
+Passaram fmt/Clippy, release, 18 testes padrão e regressão GTK. O teste nativo de desafio HTTP confirma ausência de Authorization no modo anônimo e sucesso ao reativar autenticação. O simulador confirma HTTPS autoassinado recusado por padrão e aceito com exceção explícita em TS/HLS/JPEG e SOAP, seguido de nova recusa padrão. GTK confirma persistência e ignora referências fictícias de chaveiro no modo público. Capturas inspecionadas em UI_REVIEW.md.
+
+AppImage 0.1.4 gerado e smoke por extração/Xvfb com banco temporário passou; checksum conferido. Logs efêmeros: /tmp/cctv-access-check.log, /tmp/cctv-access-tests.log, /tmp/cctv-access-clippy.log, /tmp/cctv-access-gtk.log, /tmp/cctv-access-protocols.log, /tmp/cctv-access-appimage-build.log e /tmp/cctv-access-appimage-smoke.log. Os testes de chaveiro/sink reais isolados da primeira entrega não foram repetidos; homologação física continua H01/H02. Somente commits locais, sem push/PR.

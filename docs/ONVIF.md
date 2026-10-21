@@ -9,3 +9,5 @@ Autenticação usa WS-Security UsernameToken PasswordDigest: Base64(SHA1(nonce |
 Media1 está implementado. Media2 exclusivo, HTTP Digest da camada HTTP e correção automática de desvio de relógio não estão implementados. Serviços anunciados em host diferente são recusados; cadastrar o host explicitamente é a política atual. Não é uma implementação completa de toda a especificação ONVIF.
 
 Evidências: servidor SOAP local validou digest, informações, capacidades, perfis, URI e operações PTZ/presets; teste UDP valida correlação e deduplicação. Nenhum fabricante/câmera física foi homologado. Fontes: https://www.onvif.org/profiles/specifications/ e https://www.onvif.org/ver20/ptz/wsdl/.
+
+Em 0.1.4, Client::new mantém TLS verificado e Client::new_with_tls aceita a configuração explícita da câmera. A consulta e o PTZ usam essa configuração. Sem credenciais fornece Credentials vazio (sem UsernameToken) e não acessa o chaveiro; restrições de host, esquema, redirecionamento e tamanho continuam aplicadas.
