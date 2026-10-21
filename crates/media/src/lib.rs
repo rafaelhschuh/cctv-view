@@ -19,6 +19,7 @@ unsafe extern "C" {
         timeout_ms: c_int,
         hardware: c_int,
         input_kind: c_int,
+        tls_verify: c_int,
         user: *mut c_void,
         control: extern "C" fn(*mut c_void, c_int) -> c_int,
         video: extern "C" fn(*mut c_void, *const u8, c_int, c_int, c_int, i64),
@@ -129,21 +130,23 @@ impl SessionManager {
             camera.substream_url.as_ref().unwrap_or(&camera.stream_url)
         };
         let key = format!(
-            "{}:{source}:{:?}:{}:{}:{:?}:{}:{}",
+            "{}:{source}:{:?}:{}:{}:{:?}:{}:{}:{}:{}",
             camera.id,
             camera.transport,
             camera.hardware_decode,
             camera.timeout_ms,
             camera.stream_kind,
             camera.mjpeg_multipart,
-            camera.snapshot_interval_ms
+            camera.snapshot_interval_ms,
+            camera.tls_verify,
+            camera.no_credentials
         );
         self.sessions.retain(|_, v| v.strong_count() > 0);
         if let Some(s) = self.sessions.get(&key).and_then(Weak::upgrade) {
             return Ok(s);
         }
         let mut url = url::Url::parse(source)?;
-        if !credentials.username.is_empty() {
+        if !camera.no_credentials && !credentials.username.is_empty() {
             url.set_username(&credentials.username)
                 .map_err(|_| anyhow::anyhow!("Usuário inválido"))?;
             url.set_password(Some(&credentials.password))
@@ -166,6 +169,7 @@ impl SessionManager {
         let weak = Arc::downgrade(&session);
         let tcp = matches!(camera.transport, Transport::Tcp);
         let timeout = camera.timeout_ms;
+        let tls_verify = camera.tls_verify;
         let snapshot = camera.stream_kind == StreamKind::Jpeg;
         let hardware = camera.hardware_decode && !snapshot;
         let snapshot_interval = camera.snapshot_interval_ms;
@@ -200,6 +204,7 @@ impl SessionManager {
                             timeout as c_int,
                             hardware as c_int,
                             input_kind,
+                            tls_verify as c_int,
                             &mut callback as *mut _ as *mut c_void,
                             control,
                             video,
@@ -219,6 +224,7 @@ impl SessionManager {
                                 timeout as c_int,
                                 0,
                                 input_kind,
+                                tls_verify as c_int,
                                 &mut callback as *mut _ as *mut c_void,
                                 control,
                                 video,

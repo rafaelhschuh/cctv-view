@@ -70,7 +70,8 @@ static AVCodecContext *open_decoder(AVStream *stream, int hardware) {
 // Returns FFmpeg error codes, never raw URLs/errors that could expose
 // credentials.
 int cctv_decode(const char *url, int tcp, int timeout_ms, int hardware,
-                int input_kind, void *user, Control control, Video video) {
+                int input_kind, int tls_verify, void *user, Control control,
+                Video video) {
   int result = 0, vi = -1, ai = -1;
   AVFormatContext *fmt = avformat_alloc_context();
   AVCodecContext *vd = NULL, *ad = NULL;
@@ -95,8 +96,9 @@ int cctv_decode(const char *url, int tcp, int timeout_ms, int hardware,
   snprintf(timeout, sizeof(timeout), "%lld", (long long)timeout_ms * 1000);
   av_dict_set(&options, "rw_timeout", timeout, 0);
   av_dict_set(&options, "timeout", timeout, 0);
-  av_dict_set(&options, "tls_verify", "1", 0);
-  av_dict_set(&options, "ca_file", "/etc/ssl/certs/ca-certificates.crt", 0);
+  av_dict_set(&options, "tls_verify", tls_verify ? "1" : "0", 0);
+  if (tls_verify)
+    av_dict_set(&options, "ca_file", "/etc/ssl/certs/ca-certificates.crt", 0);
   av_dict_set(&options, "protocol_whitelist",
               "http,https,tcp,tls,rtsp,rtp,udp,crypto,data", 0);
   av_dict_set(&options, "allowed_extensions", "ALL", 0);

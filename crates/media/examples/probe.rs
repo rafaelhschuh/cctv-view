@@ -5,12 +5,15 @@ fn main() -> anyhow::Result<()> {
     let url = args
         .next()
         .ok_or_else(|| anyhow::anyhow!("Usage: probe URL [--expect-failure]"))?;
-    let failure = args.any(|a| a == "--expect-failure");
+    let flags: Vec<_> = args.collect();
+    let failure = flags.iter().any(|a| a == "--expect-failure");
     let camera = Camera {
         name: "Protocol fixture".into(),
         stream_url: url,
         timeout_ms: 1000,
         hardware_decode: false,
+        tls_verify: !flags.iter().any(|a| a == "--no-verify-tls"),
+        no_credentials: flags.iter().any(|a| a == "--no-credentials"),
         ..Default::default()
     };
     let credentials = Credentials {

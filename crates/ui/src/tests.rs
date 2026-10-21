@@ -131,6 +131,18 @@ fn native_crud_editor_and_focus() {
     entry_named(&form, "Nome").set_text("Portaria de teste");
     entry_named(&form, "URL do stream").set_text(&stream_url);
     entry_named(&form, "Serviço ONVIF").set_text("http://camera.test/onvif/first");
+    let anonymous = widgets(&form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::CheckButton>().ok())
+        .find(|b| b.label().as_deref() == Some("Sem credenciais"))
+        .unwrap();
+    assert!(!anonymous.is_active());
+    entry_named(&form, "Usuário").set_text("must-not-be-sent");
+    anonymous.set_active(true);
+    assert!(!entry_named(&form, "Usuário").is_sensitive());
+    anonymous.set_active(false);
+    assert!(entry_named(&form, "Usuário").is_sensitive());
+    anonymous.set_active(true);
     capture(&form, "02-camera-connection");
     form.set_default_size(640, 480);
     capture(&form, "03-camera-small");
@@ -152,6 +164,15 @@ fn native_crud_editor_and_focus() {
     assert_eq!(kind.selected(), 1, "Pasting HTTP chooses HTTP(S)");
     kind.set_selected(2);
     notebook.set_current_page(Some(2));
+    let verify = widgets(&form)
+        .into_iter()
+        .filter_map(|w| w.downcast::<gtk::CheckButton>().ok())
+        .find(|b| b.label().as_deref() == Some("Validar certificado HTTPS"))
+        .unwrap();
+    assert!(verify.is_active());
+    verify.set_active(false);
+    verify.grab_focus();
+    capture(&form, "15-tls-options");
     capture(&form, "10-mjpeg-options");
     let multipart = widgets(&form)
         .into_iter()
@@ -187,6 +208,9 @@ fn native_crud_editor_and_focus() {
         stored.capabilities.device_url,
         "http://camera.test/onvif/first"
     );
+    assert!(stored.no_credentials);
+    assert!(!stored.tls_verify);
+    assert!(stored.secret_ref.is_none());
     assert_eq!(stored.stream_kind, cctv_core::StreamKind::Jpeg);
     assert_eq!(stored.snapshot_interval_ms, 700);
     assert!(!stored.audio_enabled);
@@ -199,6 +223,7 @@ fn native_crud_editor_and_focus() {
     assert_eq!(stored.port, listener_port(&stream_url));
     // Changing the endpoint invalidates capabilities and PTZ authorization, and persists independently.
     let mut configured = s.cameras.borrow()[0].clone();
+    configured.secret_ref = Some("unused-public-camera-key".into());
     configured.capabilities.ptz_url = Some("http://camera.test/ptz".into());
     configured.profile_token = Some("old".into());
     configured.ptz_allowed = true;
@@ -225,6 +250,12 @@ fn native_crud_editor_and_focus() {
     });
     let saved = Store::open(&path).unwrap().cameras().unwrap().remove(0);
     assert!(saved.profiles.is_empty());
+    assert!(saved.no_credentials);
+    assert!(!saved.tls_verify);
+    assert_eq!(
+        saved.secret_ref.as_deref(),
+        Some("unused-public-camera-key")
+    );
     assert!(!saved.ptz_allowed);
     assert!(saved.capabilities.ptz_url.is_none());
     // Click and standard activation are alternatives to drag-and-drop.
@@ -582,6 +613,8 @@ fn ptz_activation_is_bounded(s: &Shared) {
     );
     form.response(gtk::ResponseType::Cancel);
     let c = Camera {
+        no_credentials: true,
+        secret_ref: Some("unused-public-ptz-key".into()),
         ptz_allowed: true,
         profile_token: Some("test".into()),
         capabilities: cctv_core::Capabilities {

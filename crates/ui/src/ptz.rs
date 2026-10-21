@@ -100,11 +100,19 @@ pub fn open(s: &Shared, camera: &Camera) {
     let weak = d.downgrade();
     jobs::run(
         move || -> Result<_> {
-            let credentials = match camera.secret_ref {
-                Some(id) => Vault::get(&id)?,
-                None => Credentials::default(),
+            let credentials = if camera.no_credentials {
+                Credentials::default()
+            } else {
+                match camera.secret_ref {
+                    Some(id) => Vault::get(&id)?,
+                    None => Credentials::default(),
+                }
             };
-            cctv_onvif::Client::new(&camera.capabilities.device_url, credentials)
+            cctv_onvif::Client::new_with_tls(
+                &camera.capabilities.device_url,
+                credentials,
+                camera.tls_verify,
+            )
         },
         move |r| {
             let Some(d) = weak.upgrade() else {

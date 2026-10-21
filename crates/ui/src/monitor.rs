@@ -314,9 +314,13 @@ pub(crate) fn tile(
     let status_weak = status.downgrade();
     jobs::run(
         move || -> Result<_> {
-            let creds = match &camera.secret_ref {
-                Some(id) => Vault::get(id)?,
-                None => Credentials::default(),
+            let creds = if camera.no_credentials {
+                Credentials::default()
+            } else {
+                match &camera.secret_ref {
+                    Some(id) => Vault::get(id)?,
+                    None => Credentials::default(),
+                }
             };
             let session = manager
                 .lock()

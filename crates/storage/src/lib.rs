@@ -286,13 +286,21 @@ mod connection_compatibility {
             ..Default::default()
         };
         let mut legacy = serde_json::to_value(&c)?;
-        for key in ["stream_kind", "snapshot_interval_ms", "mjpeg_multipart"] {
+        for key in [
+            "stream_kind",
+            "snapshot_interval_ms",
+            "mjpeg_multipart",
+            "no_credentials",
+            "tls_verify",
+        ] {
             legacy.as_object_mut().expect("camera object").remove(key);
         }
         let old: Camera = serde_json::from_value(legacy)?;
         assert_eq!(old.stream_kind, StreamKind::Auto);
         assert_eq!(old.snapshot_interval_ms, 1000);
         assert!(old.mjpeg_multipart);
+        assert!(old.tls_verify);
+        assert!(!old.no_credentials);
         old.validate()?;
         let store = Store::memory()?;
         store.save_camera(&old)?;

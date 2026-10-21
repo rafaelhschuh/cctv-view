@@ -8,8 +8,16 @@ async fn main() -> anyhow::Result<()> {
         username: std::env::var("CCTV_TEST_USER").unwrap_or_default(),
         password: std::env::var("CCTV_TEST_PASSWORD").unwrap_or_default(),
     };
-    let client = cctv_onvif::Client::new(&endpoint, creds)?;
-    let info = client.inspect().await?;
+    let flags: Vec<_> = std::env::args().skip(2).collect();
+    let verify = !flags.iter().any(|a| a == "--no-verify-tls");
+    let client = cctv_onvif::Client::new_with_tls(&endpoint, creds, verify)?;
+    let result = client.inspect().await;
+    if flags.iter().any(|a| a == "--expect-failure") {
+        anyhow::ensure!(result.is_err(), "Expected ONVIF connection failure");
+        println!("Expected ONVIF failure verified");
+        return Ok(());
+    }
+    let info = result?;
     anyhow::ensure!(!info.profiles.is_empty(), "No profiles");
     let profile = &info.profiles[0];
     let target = info

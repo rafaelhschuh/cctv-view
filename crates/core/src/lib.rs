@@ -32,7 +32,7 @@ pub enum StreamKind {
 fn default_snapshot_interval() -> u32 {
     1000
 }
-fn default_multipart() -> bool {
+fn default_true() -> bool {
     true
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -62,10 +62,14 @@ pub struct Camera {
     pub stream_kind: StreamKind,
     #[serde(default = "default_snapshot_interval")]
     pub snapshot_interval_ms: u32,
-    #[serde(default = "default_multipart")]
+    #[serde(default = "default_true")]
     pub mjpeg_multipart: bool,
     pub substream_url: Option<String>,
     pub secret_ref: Option<String>,
+    #[serde(default)]
+    pub no_credentials: bool,
+    #[serde(default = "default_true")]
+    pub tls_verify: bool,
     pub manufacturer: String,
     pub model: String,
     pub profiles: Vec<MediaProfile>,
@@ -92,6 +96,8 @@ impl Default for Camera {
             mjpeg_multipart: true,
             substream_url: None,
             secret_ref: None,
+            no_credentials: false,
+            tls_verify: true,
             manufacturer: String::new(),
             model: String::new(),
             profiles: vec![],

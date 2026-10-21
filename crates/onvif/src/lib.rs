@@ -45,11 +45,15 @@ fn endpoint(url: &str) -> Result<url::Url> {
 }
 impl Client {
     pub fn new(device: &str, credentials: Credentials) -> Result<Self> {
+        Self::new_with_tls(device, credentials, true)
+    }
+    pub fn new_with_tls(device: &str, credentials: Credentials, tls_verify: bool) -> Result<Self> {
         endpoint(device)?;
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(4))
             .connect_timeout(Duration::from_secs(2))
             .redirect(reqwest::redirect::Policy::none())
+            .danger_accept_invalid_certs(!tls_verify)
             .build()?;
         Ok(Self {
             http,

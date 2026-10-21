@@ -288,3 +288,76 @@ fn explicit_mjpeg_formats_and_snapshot_refresh() {
         worker.join().unwrap();
     }
 }
+
+#[test]
+fn anonymous_mode_never_answers_auth_challenge() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let endpoint = format!("http://{}/snapshot.jpg", listener.local_addr().unwrap());
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = stop.clone();
+    let authenticated = Arc::new(AtomicBool::new(false));
+    let seen = authenticated.clone();
+    let worker = thread::spawn(move || {
+        while !flag.load(Ordering::Acquire) {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(1)))
+                    .unwrap();
+                let mut bytes = vec![];
+                let mut buf = [0; 2048];
+                while bytes.len() < 8192 && !bytes.ends_with(b"\r\n\r\n") {
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    bytes.extend_from_slice(&buf[..n]);
+                }
+                if String::from_utf8_lossy(&bytes)
+                    .to_ascii_lowercase()
+                    .contains("\r\nauthorization: basic ")
+                {
+                    seen.store(true, Ordering::Release);
+                    let jpeg = include_bytes!("fixtures/sample.jpg");
+                    let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", jpeg.len());
+                    let _ = stream.write_all(jpeg);
+                } else {
+                    let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"fixture\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                }
+            } else {
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+    });
+    let mut camera = Camera {
+        name: "Authentication challenge".into(),
+        stream_url: endpoint,
+        no_credentials: true,
+        timeout_ms: 500,
+        hardware_decode: false,
+        ..Default::default()
+    };
+    let credentials = || Credentials {
+        username: "fixture".into(),
+        password: "fixture-only".into(),
+    };
+    let anonymous_result = cctv_media::connection_test(&camera, credentials());
+    let anonymous_sent_auth = authenticated.load(Ordering::Acquire);
+    camera.no_credentials = false;
+    let authenticated_result = cctv_media::connection_test(&camera, credentials());
+    stop.store(true, Ordering::Release);
+    worker.join().unwrap();
+    assert!(
+        anonymous_result.is_err(),
+        "Anonymous mode must not authenticate even when credentials were passed"
+    );
+    assert!(
+        !anonymous_sent_auth,
+        "A challenge must never disclose credentials in anonymous mode"
+    );
+    assert!(
+        authenticated_result.is_ok(),
+        "Control fixture must accept the same credentials when enabled"
+    );
+    assert!(authenticated.load(Ordering::Acquire));
+}

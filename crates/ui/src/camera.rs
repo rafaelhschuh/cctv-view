@@ -179,8 +179,13 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     };
     update_destination(&stream);
     stream.connect_changed(update_destination);
-    forms::section(&connection, "Credenciais");
-    let user = forms::entry(&connection, "Usuário", "");
+    forms::section(&connection, "Autenticação");
+    let anonymous = gtk::CheckButton::with_label("Sem credenciais");
+    anonymous.set_active(camera.no_credentials);
+    connection.append(&anonymous);
+    let credential_fields = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    connection.append(&credential_fields);
+    let user = forms::entry(&credential_fields, "Usuário", "");
     let password = gtk::PasswordEntry::builder()
         .show_peek_icon(true)
         .hexpand(true)
@@ -190,11 +195,18 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     } else {
         "Senha da câmera"
     }));
-    forms::row(&connection, "Senha", &password);
+    forms::row(&credential_fields, "Senha", &password);
     forms::help(
-        &connection,
+        &credential_fields,
         "As credenciais são protegidas pelo chaveiro do sistema.",
     );
+    credential_fields.set_sensitive(!anonymous.is_active());
+    credential_fields.set_visible(!anonymous.is_active());
+    anonymous.connect_toggled(move |choice| {
+        credential_fields.set_sensitive(!choice.is_active());
+        credential_fields.set_visible(!choice.is_active());
+    });
+    forms::help(&connection, "Sem credenciais: não envia usuário/senha. Credenciais já salvas são preservadas para reativação.");
     let test = gtk::Button::with_label("Testar conexão de vídeo");
     test.set_halign(gtk::Align::Start);
     connection.append(&test);
@@ -243,7 +255,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     advanced.append(&rtsp_options);
     let http_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
     forms::section(&http_options, "Opções HTTP(S)");
-    forms::help(&http_options, "Vídeo contínuo ou playlist HLS: o formato é detectado automaticamente. Para HTTPS, o certificado é sempre validado.");
+    forms::help(&http_options, "Vídeo contínuo ou playlist HLS: o formato é detectado automaticamente. Para HTTPS, a validação de certificado é configurada abaixo.");
     advanced.append(&http_options);
     let mjpeg_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
     forms::section(&mjpeg_options, "Opções MJPEG");
@@ -264,6 +276,11 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     forms::row(&jpeg_options, "Atualização JPEG (ms)", &interval);
     forms::help(&jpeg_options, "Uma nova imagem é solicitada após esse intervalo. A última imagem permanece visível entre atualizações. Este modo não possui áudio.");
     advanced.append(&jpeg_options);
+    forms::section(&advanced, "Segurança HTTPS");
+    let tls_verify = gtk::CheckButton::with_label("Validar certificado HTTPS");
+    tls_verify.set_active(camera.tls_verify);
+    advanced.append(&tls_verify);
+    forms::help(&advanced, "Desmarque para aceitar certificados autoassinados ou inválidos neste dispositivo. Aplica-se ao vídeo e ao ONVIF.");
     forms::section(&advanced, "Conexão");
     let timeout = forms::entry(&advanced, "Timeout (ms)", &camera.timeout_ms.to_string());
     let video_options = gtk::Box::new(gtk::Orientation::Vertical, 12);
@@ -299,7 +316,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
             video_options.set_visible(selected < 2);
             let (placeholder, help) = match selected {
                 0 => ("rtsp://192.168.1.20:554/live", "Stream RTSP. Configure TCP ou UDP na aba Avançado. Informe usuário e senha nos campos abaixo."),
-                1 => ("https://192.168.1.20/video.m3u8", "Vídeo HTTP(S) ou HLS. O formato é detectado automaticamente; certificados HTTPS são validados."),
+                1 => ("https://192.168.1.20/video.m3u8", "Vídeo HTTP(S) ou HLS. O formato é detectado automaticamente; configure a validação de certificado na aba Avançado."),
                 2 => ("http://192.168.1.20/video.mjpeg", "Vídeo MJPEG por HTTP(S). Escolha multipart ou contínuo na aba Avançado."),
                 _ => ("http://192.168.1.20/snapshot.jpg", "Imagem JPEG por HTTP(S). Ajuste o intervalo de atualização na aba Avançado."),
             };
@@ -340,30 +357,62 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     d.content_area().append(&feedback);
     let loaded = Rc::new(RefCell::new(None::<Credentials>));
     let busy = Rc::new(Cell::new(false));
-    if let Some(id) = camera.secret_ref.clone() {
-        let user = user.clone();
+    // Load saved credentials only in authenticated mode, including when re-enabling it.
+    let load_credentials = {
+        let reference = camera.secret_ref.clone();
         let loaded = loaded.clone();
+        let loading = Rc::new(Cell::new(false));
+        let user = user.clone();
         let feedback = feedback.clone();
-        jobs::run(
-            move || Vault::get(&id),
-            move |r| match r {
-                Ok(c) => {
-                    if user.text().is_empty() {
-                        user.set_text(&c.username);
+        let anonymous = anonymous.downgrade();
+        Rc::new(move || {
+            let Some(choice) = anonymous.upgrade() else {
+                return;
+            };
+            if choice.is_active() || loaded.borrow().is_some() || loading.get() {
+                return;
+            }
+            let Some(id) = reference.clone() else { return };
+            loading.set(true);
+            let loaded = loaded.clone();
+            let loading = loading.clone();
+            let user = user.clone();
+            let feedback = feedback.clone();
+            let anonymous = anonymous.clone();
+            jobs::run(
+                move || Vault::get(&id),
+                move |result| {
+                    loading.set(false);
+                    match result {
+                        Ok(c) => {
+                            if user.text().is_empty() {
+                                user.set_text(&c.username);
+                            }
+                            *loaded.borrow_mut() = Some(c);
+                        }
+                        Err(e) if anonymous.upgrade().is_some_and(|a| !a.is_active()) => {
+                            feedback.set_text(&e.to_string())
+                        }
+                        Err(_) => {}
                     }
-                    *loaded.borrow_mut() = Some(c);
-                }
-                Err(e) => feedback.set_text(&e.to_string()),
-            },
-        );
-    }
+                },
+            );
+        })
+    };
+    load_credentials();
+    anonymous.connect_toggled(move |choice| {
+        if !choice.is_active() {
+            load_credentials();
+        }
+    });
     let get_creds = {
         let user = user.clone();
         let password = password.clone();
         let loaded = loaded.clone();
         let forget = forget.clone();
+        let anonymous = anonymous.clone();
         move || {
-            if forget.is_active() {
+            if anonymous.is_active() || forget.is_active() {
                 Credentials::default()
             } else {
                 Credentials {
@@ -425,6 +474,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
     let endpoint2 = endpoint.clone();
     let busy2 = busy.clone();
     let ptz2 = ptz.clone();
+    let query_tls = tls_verify.clone();
     query.connect_clicked(move |b| {
         if busy2.replace(true) {
             return;
@@ -432,6 +482,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
         b.set_sensitive(false);
         feed.set_text("Consultando dispositivo…");
         let credentials = get();
+        let verify = query_tls.is_active();
         let endpoint = endpoint2.text().to_string();
         let requested_endpoint = endpoint.clone();
         let endpoint_widget = endpoint2.clone();
@@ -445,7 +496,7 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
         jobs::run(
             move || {
                 rt.block_on(async {
-                    cctv_onvif::Client::new(&endpoint, credentials)?
+                    cctv_onvif::Client::new_with_tls(&endpoint, credentials, verify)?
                         .inspect()
                         .await
                 })
@@ -521,8 +572,12 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
         let kind = kind.clone();
         let interval = interval.clone();
         let multipart = multipart.clone();
+        let anonymous = anonymous.clone();
+        let tls_verify = tls_verify.clone();
         move || -> Result<Camera> {
             let mut c = original.borrow().clone();
+            c.no_credentials = anonymous.is_active();
+            c.tls_verify = tls_verify.is_active();
             c.name = name.text().trim().to_string();
             if c.name.is_empty() || c.name.len() > 160 {
                 notebook.set_current_page(Some(0));
@@ -651,7 +706,8 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
         };
         let creds = get_creds();
         let forget = forget.is_active();
-        if !forget
+        if !c.no_credentials
+            && !forget
             && c.secret_ref.is_some()
             && loaded.borrow().is_none()
             && password.text().is_empty()
@@ -671,12 +727,12 @@ pub fn form(s: &Shared, camera: Camera, library: Option<gtk::Box>) {
         jobs::run(
             move || -> Result<_> {
                 let previous = c.secret_ref.clone();
-                if forget || creds.username.is_empty() {
+                if forget || (!c.no_credentials && creds.username.is_empty()) {
                     if let Some(id) = &previous {
                         Vault::delete(id)?;
                     }
                     c.secret_ref = None;
-                } else {
+                } else if !c.no_credentials {
                     let reference = format!("camera:{}", c.id);
                     Vault::store(&reference, &creds)?;
                     c.secret_ref = Some(reference);

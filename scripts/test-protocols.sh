@@ -12,7 +12,9 @@ printf '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENC
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$FIXTURES/key.pem" -out "$FIXTURES/cert.pem" -days 1 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' >/dev/null 2>&1
 python3 tests/camera_simulator.py --fixtures "$FIXTURES" --tls-cert "$FIXTURES/cert.pem" --tls-key "$FIXTURES/key.pem" --username operator --password fixture-only > "$FIXTURES/server.log" 2>&1 &
 server_pid=$!
-for _ in $(seq 1 50); do if curl --silent --fail http://127.0.0.1:18080/events >/dev/null; then break; fi; sleep .1; done
+for _ in $(seq 1 50); do if CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=fixture-only target/debug/examples/probe https://127.0.0.1:18443/onvif/device_service --expect-failure
+CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=fixture-only target/debug/examples/probe https://127.0.0.1:18443/onvif/device_service --no-verify-tls
+curl --silent --fail http://127.0.0.1:18080/events >/dev/null; then break; fi; sleep .1; done
 cargo build -p cctv-media --example probe --locked
 probe=target/debug/examples/probe
 "$probe" http://127.0.0.1:18080/live.ts
@@ -24,9 +26,16 @@ CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=fixture-only "$probe" rtsp://127.0.0.
 CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=wrong "$probe" rtsp://127.0.0.1:18554/live --expect-failure
 "$probe" rtsp://127.0.0.1:1/live --expect-failure
 "$probe" https://localhost:18443/live.ts --expect-failure
-# A self-signed untrusted certificate must be rejected. Trust-store changes are never implicit.
+# Explicit opt-out accepts this fixture certificate, without changing the secure default.
+"$probe" https://localhost:18443/live.ts --no-verify-tls
+"$probe" https://localhost:18443/live.m3u8 --no-verify-tls
+"$probe" https://localhost:18443/snapshot.jpg --no-verify-tls
+"$probe" https://localhost:18443/live.ts --expect-failure
+CCTV_TEST_USER=unused CCTV_TEST_PASSWORD=unused "$probe" http://127.0.0.1:18080/live.ts --no-credentials
 cargo build -p cctv-onvif --example probe --locked
 CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=fixture-only target/debug/examples/probe http://127.0.0.1:18080/onvif/device_service
+CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=fixture-only target/debug/examples/probe https://127.0.0.1:18443/onvif/device_service --expect-failure
+CCTV_TEST_USER=operator CCTV_TEST_PASSWORD=fixture-only target/debug/examples/probe https://127.0.0.1:18443/onvif/device_service --no-verify-tls
 curl --silent --fail http://127.0.0.1:18080/events > "$FIXTURES/events.json"
 python3 - "$FIXTURES/events.json" <<'PY'
 import json,sys
