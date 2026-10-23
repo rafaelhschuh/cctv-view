@@ -2,6 +2,7 @@
 name = "cctv-view"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 [dependencies]
 cctv-ui.workspace = true
 cctv-storage.workspace = true

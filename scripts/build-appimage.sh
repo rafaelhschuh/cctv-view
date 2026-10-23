@@ -16,6 +16,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 "$TOOLS/linuxdeploy-x86_64.AppImage" --appdir "$APPDI
 install -m755 packaging/appimage/AppRun "$APPDIR/AppRun"
 install -m644 packaging/desktop/br.dev.schuh.cctv-view.metainfo.xml "$APPDIR/usr/share/metainfo/br.dev.schuh.cctv-view.appdata.xml"
 install -m644 LICENSE "$APPDIR/usr/share/licenses/cctv-view/LICENSE"
+install -m644 COPYRIGHT "$APPDIR/usr/share/licenses/cctv-view/COPYRIGHT"
 python3 scripts/collect-rust-licenses.py "$APPDIR"
 # GTK needs schemas and symbolic icons even when the destination lacks development packages.
 cp -a /usr/share/glib-2.0/schemas/. "$APPDIR/usr/share/glib-2.0/schemas/"

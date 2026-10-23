@@ -5,7 +5,7 @@
   <developer id="br.dev.schuh"><name>Rafael Henrique Schuh da Silva</name></developer>
   <summary>Monitoramento nativo de câmeras IP para Linux</summary>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>GPL-3.0-only</project_license>
   <description><p>Visualize câmeras IP com FFmpeg, organize Views em uma grade e controle dispositivos ONVIF compatíveis.</p></description>
   <launchable type="desktop-id">br.dev.schuh.cctv-view.desktop</launchable>
   <provides><binary>cctv-view</binary></provides>
