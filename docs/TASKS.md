@@ -31,3 +31,4 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | U05 | Biblioteca, pastas e clonagem / core,storage,ui | U01 | filtro/busca, linhas alinhadas, persistência, rascunho sem senha e preservação de Views | DONE |
 | U06 | Preferências e transferência de câmeras / storage,ui | U05/A02 | abas, revisão de URL, JSON sem chaveiro, limites, importação atômica/aditiva e AppImage | DONE |
 | A03 | Reautenticar ações de dados e criptografar transferência / storage,ui | U05/U06/A02 | credenciais/URLs completas, senha por ação, AEAD, rollback, chaveiro GTK isolado e AppImage | DONE |
+| R03 | Workflow GitHub AppImage e GPLv3 / workflows,packaging,docs | R01 | actionlint, crates GPL-3.0-only, build/pacote/smoke local e artifact configurado | IN PROGRESS |

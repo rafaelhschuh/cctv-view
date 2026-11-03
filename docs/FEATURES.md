@@ -24,6 +24,6 @@
 | Segurança | Secret Service roundtrip/delete em sessão isolada, URLs sem userinfo, XML limitado e TLS | Revisão independente: NOT VERIFIED |
 | Métricas | CPU/RSS, frames/descartes, idade local do frame, decoder, PCM entregue | Não mede latência desde o sensor |
 | Documentação/agentes/CI | AGENTS, ADR, plano, tarefas, progresso, scripts e workflow presentes | CI remota não executada: apenas commits locais |
-| Release/AppImage | Release compilado; pacote local gerado; smoke com extração/Xvfb e dados temporários | Outro sistema e execução FUSE: NOT VERIFIED |
+| Release/AppImage | Build local e smoke por extração; workflow AppImage em push/PR/manual com artifact, checksum e fontes próprios; licença GPL-3.0-only no projeto/crates/metadados | Execução no GitHub, outro sistema e FUSE: NOT VERIFIED |
 
 Para considerar a primeira versão completa, concluir as verificações físicas da especificação, compatibilidade de dispositivos escolhidos, desempenho e AppImage em sistema separado. As restrições explícitas acima não foram removidas do backlog.

@@ -17,6 +17,10 @@ Sem FUSE: `APPIMAGE_EXTRACT_AND_RUN=1 ./dist/CCTV-View-x86_64.AppImage`.
 
 Para desenvolvimento, instale as [dependências nativas](docs/BUILD.md) e execute `scripts/dev.sh`. Verificações: `scripts/check.sh`.
 
+## Gerar no GitHub
+
+O workflow **AppImage** (`.github/workflows/appimage.yml`) executa em pushes, pull requests ou manualmente em **Actions → AppImage → Run workflow**. Ao terminar, baixe **CCTV-View-x86_64** em **Artifacts**: inclui AppImage, checksum, fontes do projeto no commit compilado e informações do build. Não exige secrets personalizados nem publica uma Release. Veja [APPIMAGE](docs/APPIMAGE.md).
+
 ## Usar
 
 1. Abra **Câmeras** na barra superior; adicione uma URL RTSP/HTTP/HTTPS ou descubra um dispositivo ONVIF na rede.
@@ -53,3 +57,7 @@ Em **Preferências → Segurança → Senha do aplicativo**, informe nova senha 
 ```
 
 As listagens JSON funcionam sem display e omitem URLs/credenciais. Bibliotecas com senha exigem desbloqueio. `--unlock-stdin` recebe a senha por pipe de um gerenciador de segredos, sem colocá-la em argumentos; sem essa opção, a abertura gráfica pede a senha. Consulte [CLI](docs/CLI.md).
+
+## Licença
+
+CCTV View é distribuído sob a **GNU General Public License, versão 3 exclusivamente** (`GPL-3.0-only`). Consulte [LICENSE](LICENSE) e [COPYRIGHT](COPYRIGHT). Componentes de terceiros mantêm suas próprias licenças e avisos.

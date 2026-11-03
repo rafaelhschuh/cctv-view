@@ -1,5 +1,11 @@
 # Changelog
 
+## Não lançado — 2026-10-23
+
+- Workflow AppImage dedicado para push, pull request e execução manual: runner Ubuntu 24.04, ferramentas conferidas por SHA256, build release, smoke headless/GTK e artifact com AppImage, checksum, fontes próprios e informações do build.
+- CI usa o chaveiro descartável em `scripts/test-ui.sh`; empacotamento removido do CI geral para evitar duplicação.
+- Licença alterada para GPL-3.0-only, com texto integral GPLv3, copyright, herança explícita nos seis crates e metadados AppStream. O pacote inclui LICENSE e COPYRIGHT; dependências preservam suas próprias licenças.
+
 ## 0.4.0 — 2026-10-21
 
 - Editar/visualizar dados, clonar e exportar câmeras pedem a senha do aplicativo a cada ação, quando configurada. Cancelar ou errar a senha não libera a operação; desbloqueio inicial não guarda essa autorização.

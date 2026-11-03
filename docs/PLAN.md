@@ -39,3 +39,6 @@ Entrega 0.3.0 concluída localmente: 26 testes padrão, GTK em claro/escuro, rel
 Correção de escopo solicitada: preservar dados completos, retirar revisão de URLs e clonagem sem senha; pedir senha do aplicativo por ação de visualização/edição/clonagem/exportação quando configurada. JSON sempre criptografado com senha escolhida na exportação e solicitada na importação. Verificar AEAD, senha incorreta, adulteração, restauração independente de credenciais, falha/rollback, GTK com Secret Service privado, release e AppImage. Somente commits locais.
 
 Entrega 0.4.0 concluída localmente: 27 testes padrão, regressão GTK com chaveiro privado em claro/escuro, release, auditoria local e smoke/checksum do AppImage passaram. Política de credenciais/transferência de 0.3.0 substituída pelo pedido atual. Somente commits locais.
+
+## Workflow AppImage e GPLv3 (2026-10-23)
+Separar empacotamento do CI geral em workflow manual/push/PR, publicar artifact sem criar Release, preservar conferência de ferramentas e incluir fontes próprios/informações do build. Aplicar GPL-3.0-only à raiz, crates e metadados; incluir aviso de copyright no AppImage. Verificar actionlint, metadados, build e pacote local. Push autorizado pelo usuário em 2026-11-03; validação feita pelos workflows no GitHub.
