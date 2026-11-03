@@ -1,6 +1,6 @@
 # AppImage
 
-`scripts/fetch-appimage-tools.sh` baixa linuxdeploy, appimagetool e type2-runtime oficiais e confere os hashes em packaging/appimage/tools.sha256. Assets continuous podem mudar: nesse caso, o script falha; revisar a atualização e os hashes antes de aceitá-los. As ferramentas são ignoradas pelo Git.
+`scripts/fetch-appimage-tools.sh` baixa linuxdeploy, appimagetool e type2-runtime oficiais e confere os hashes em packaging/appimage/tools.sha256. As ferramentas vêm de releases com tag (ver GitHub Actions abaixo); se um hash não conferir, o script falha. As ferramentas são ignoradas pelo Git.
 
 ```sh
 scripts/fetch-appimage-tools.sh
@@ -33,6 +33,6 @@ O artifact contém:
 - `CCTV-View-source.tar.gz`, fontes próprios do commit compilado, incluindo Cargo.lock, scripts e licença;
 - `BUILD-INFO.txt`, commit, toolchain e versões dos pacotes nativos no runner.
 
-O arquivo de fontes próprio não inclui um pacote completo das fontes de todas as bibliotecas embarcadas; o inventário e a homologação de redistribuição de R02 continuam separados. Os hashes das ferramentas `continuous` são deliberadamente fixos: se o upstream trocar um asset, revisar os hashes, sem desativar a conferência.
+O arquivo de fontes próprio não inclui um pacote completo das fontes de todas as bibliotecas embarcadas; o inventário e a homologação de redistribuição de R02 continuam separados. As ferramentas são baixadas de releases com tag (linuxdeploy `1-alpha-20251107-1`, appimagetool `1.9.1`, type2-runtime `20251108`) e conferidas pelos SHA256 de `packaging/appimage/tools.sha256`, que coincidem com os digests publicados pelo GitHub. Os builds `continuous` mudam sem aviso e quebravam a conferência; para atualizar, trocar a tag e o hash juntos, sem desativar a verificação.
 
 O CI geral (`ci.yml`) mantém fmt, Clippy, testes de modelo, protocolos, serviços, GTK com chaveiro descartável e auditoria. O empacotamento foi movido ao workflow dedicado para evitar gerar o mesmo AppImage duas vezes por evento. O próprio AppImage inclui LICENSE GPLv3 e COPYRIGHT em `usr/share/licenses/cctv-view/`; metadados AppStream declaram GPL-3.0-only, mantendo CC0-1.0 para os metadados.
