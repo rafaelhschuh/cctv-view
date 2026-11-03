@@ -15,6 +15,8 @@ chmod +x dist/CCTV-View-x86_64.AppImage
 
 Sem FUSE: `APPIMAGE_EXTRACT_AND_RUN=1 ./dist/CCTV-View-x86_64.AppImage`.
 
+As versões publicadas no GitHub trazem informação de atualização: integre o AppImage pelo **Gear Lever** (ou use AppImageUpdate) para receber novas Releases automaticamente.
+
 Para desenvolvimento, instale as [dependências nativas](docs/BUILD.md) e execute `scripts/dev.sh`. Verificações: `scripts/check.sh`.
 
 ## Gerar no GitHub

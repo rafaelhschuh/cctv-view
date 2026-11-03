@@ -1,7 +1,9 @@
 # Changelog
 
-## Não lançado — 2026-10-23
+## 0.4.1 — 2026-11-03
 
+- Atualização automática do AppImage: informação `gh-releases-zsync` embutida e `CCTV-View-x86_64.AppImage.zsync` publicado em cada Release. Gear Lever e AppImageUpdate detectam a origem e baixam só os blocos alterados. Quem está na 0.4.0 precisa instalar a 0.4.1 manualmente uma vez.
+- Ferramentas de empacotamento fixadas em releases com tag e tokio 1.54.1 (RUSTSEC-2026-0384).
 - Workflow AppImage dedicado para push, pull request e execução manual: runner Ubuntu 24.04, ferramentas conferidas por SHA256, build release, smoke headless/GTK e artifact com AppImage, checksum, fontes próprios e informações do build.
 - CI usa o chaveiro descartável em `scripts/test-ui.sh`; empacotamento removido do CI geral para evitar duplicação.
 - Push na main publica automaticamente a GitHub Release `vX.Y.Z` quando a versão do workspace ainda não foi lançada: tag criada pelo workflow, AppImage, checksum, fontes e informações do build, notas extraídas do CHANGELOG.

@@ -65,8 +65,16 @@ jobs:
             dpkg-query -W -f='${binary:Package}\t${Version}\n'
           } > dist/BUILD-INFO.txt
           cd dist
-          sha256sum CCTV-View-x86_64.AppImage CCTV-View-source.tar.gz \
-            BUILD-INFO.txt > SHA256SUMS
+          sha256sum CCTV-View-x86_64.AppImage CCTV-View-x86_64.AppImage.zsync \
+            CCTV-View-source.tar.gz BUILD-INFO.txt > SHA256SUMS
+
+      - name: Verify embedded update information
+        run: |
+          set -euo pipefail
+          expected='gh-releases-zsync|rafaelhschuh|cctv-view|latest|CCTV-View-x86_64.AppImage.zsync'
+          actual=$(dist/CCTV-View-x86_64.AppImage --appimage-updateinformation)
+          [[ "$actual" == "$expected" ]] || { echo "Update info inesperada: $actual" >&2; exit 1; }
+          grep -aqx 'Filename: CCTV-View-x86_64.AppImage' <(head -c 1024 dist/CCTV-View-x86_64.AppImage.zsync | tr -d '\r')
 
       - name: Verify CLI without a display
         env:
@@ -101,6 +109,7 @@ jobs:
           name: CCTV-View-x86_64
           path: |
             dist/CCTV-View-x86_64.AppImage
+            dist/CCTV-View-x86_64.AppImage.zsync
             dist/CCTV-View-source.tar.gz
             dist/BUILD-INFO.txt
             dist/SHA256SUMS
@@ -156,5 +165,6 @@ jobs:
           (cd dist && sha256sum --check SHA256SUMS)
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "CCTV View ${TAG#v}" --notes-file RELEASE-NOTES.md \
-            dist/CCTV-View-x86_64.AppImage dist/SHA256SUMS \
+            dist/CCTV-View-x86_64.AppImage dist/CCTV-View-x86_64.AppImage.zsync \
+            dist/SHA256SUMS \
             dist/CCTV-View-source.tar.gz dist/BUILD-INFO.txt

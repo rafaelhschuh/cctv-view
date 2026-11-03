@@ -32,3 +32,4 @@ Estados: TODO, IN PROGRESS, BLOCKED, DONE. DONE identifica o critério local des
 | U06 | Preferências e transferência de câmeras / storage,ui | U05/A02 | abas, revisão de URL, JSON sem chaveiro, limites, importação atômica/aditiva e AppImage | DONE |
 | A03 | Reautenticar ações de dados e criptografar transferência / storage,ui | U05/U06/A02 | credenciais/URLs completas, senha por ação, AEAD, rollback, chaveiro GTK isolado e AppImage | DONE |
 | R03 | Workflow GitHub AppImage e GPLv3 / workflows,packaging,docs | R01 | actionlint, crates GPL-3.0-only, build/pacote/smoke local e artifact configurado | DONE |
+| R04 | Atualização automática do AppImage / scripts,workflows,docs | R03 | update info embutida, .zsync na Release, checagem no CI e Release 0.4.1 | IN PROGRESS |

@@ -18,7 +18,7 @@ Baseline do pacote desta sessão: Zorin 18.1 / Ubuntu 24.04 x86_64, glibc 2.39. 
 
 Bibliotecas FFmpeg, GTK e dependências têm licenças próprias. O código do aplicativo é GPL-3.0-only; isso não muda as licenças do pacote agregado. linuxdeploy coleta avisos nativos disponíveis em usr/share/doc; o script collect-rust-licenses.py inclui os avisos distribuídos nos crates e um inventário SPDX em usr/share/licenses/cctv-view/RUST-DEPENDENCIES.tsv; verificar o inventário e as obrigações LGPL/GPL, incluindo fontes correspondentes das versões embarcadas, antes de redistribuição pública. O FFmpeg do Ubuntu pode habilitar componentes GPL. Não foi produzido um pacote universal de fontes nesta sessão.
 
-Foi executado smoke do AppImage por extração no display Xvfb, com banco temporário e encerramento automático. Isso valida inicialização no host de build; não substitui teste em outra VM/computador. Execução sem extração/FUSE, Wayland, drivers e sistema separado permanecem NOT VERIFIED. O pacote é uma prévia 0.4.0, não release 1.0 homologada.
+Foi executado smoke do AppImage por extração no display Xvfb, com banco temporário e encerramento automático. Isso valida inicialização no host de build; não substitui teste em outra VM/computador. Execução sem extração/FUSE, Wayland, drivers e sistema separado permanecem NOT VERIFIED. O pacote é uma prévia 0.4.x, não release 1.0 homologada.
 
 ## GitHub Actions
 
@@ -36,3 +36,7 @@ O artifact contém:
 O arquivo de fontes próprio não inclui um pacote completo das fontes de todas as bibliotecas embarcadas; o inventário e a homologação de redistribuição de R02 continuam separados. As ferramentas são baixadas de releases com tag (linuxdeploy `1-alpha-20251107-1`, appimagetool `1.9.1`, type2-runtime `20251108`) e conferidas pelos SHA256 de `packaging/appimage/tools.sha256`, que coincidem com os digests publicados pelo GitHub. Os builds `continuous` mudam sem aviso e quebravam a conferência; para atualizar, trocar a tag e o hash juntos, sem desativar a verificação.
 
 O CI geral (`ci.yml`) mantém fmt, Clippy, testes de modelo, protocolos, serviços, GTK com chaveiro descartável e auditoria. O empacotamento foi movido ao workflow dedicado para evitar gerar o mesmo AppImage duas vezes por evento. O próprio AppImage inclui LICENSE GPLv3 e COPYRIGHT em `usr/share/licenses/cctv-view/`; metadados AppStream declaram GPL-3.0-only, mantendo CC0-1.0 para os metadados.
+
+## Atualização automática
+
+O build embute `gh-releases-zsync|rafaelhschuh|cctv-view|latest|CCTV-View-x86_64.AppImage.zsync` e gera o `.zsync` ao lado do AppImage. O appimagetool grava esse arquivo no diretório de trabalho, por isso o script o executa dentro do diretório temporário com o nome final. Gear Lever, AppImageUpdate e ferramentas compatíveis leem essa informação, consultam a última Release do repositório e baixam só os blocos alterados. `CCTV_VIEW_UPDATE_INFO=` (vazio) gera um pacote sem atualização, útil para forks; outro valor substitui a origem. O workflow confere `--appimage-updateinformation` e o cabeçalho do `.zsync` antes de publicar. Conferir: `./CCTV-View-x86_64.AppImage --appimage-updateinformation`. A atualização pelo Gear Lever em um desktop real é NOT VERIFIED.
