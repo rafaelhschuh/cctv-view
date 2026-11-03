@@ -19,7 +19,7 @@ Para desenvolvimento, instale as [dependências nativas](docs/BUILD.md) e execut
 
 ## Gerar no GitHub
 
-O workflow **AppImage** (`.github/workflows/appimage.yml`) executa em pushes, pull requests ou manualmente em **Actions → AppImage → Run workflow**. Ao terminar, baixe **CCTV-View-x86_64** em **Artifacts**: inclui AppImage, checksum, fontes do projeto no commit compilado e informações do build. Não exige secrets personalizados nem publica uma Release. Veja [APPIMAGE](docs/APPIMAGE.md).
+O workflow **AppImage** (`.github/workflows/appimage.yml`) executa em pushes, pull requests ou manualmente em **Actions → AppImage → Run workflow**. Ao terminar, baixe **CCTV-View-x86_64** em **Artifacts**: inclui AppImage, checksum, fontes do projeto no commit compilado e informações do build. Não exige secrets personalizados. Ao enviar uma tag `vX.Y.Z` com a seção correspondente no CHANGELOG, o mesmo workflow publica a GitHub Release com esses arquivos. Veja [APPIMAGE](docs/APPIMAGE.md).
 
 ## Usar
 

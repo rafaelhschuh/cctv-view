@@ -4,6 +4,7 @@
 
 - Workflow AppImage dedicado para push, pull request e execução manual: runner Ubuntu 24.04, ferramentas conferidas por SHA256, build release, smoke headless/GTK e artifact com AppImage, checksum, fontes próprios e informações do build.
 - CI usa o chaveiro descartável em `scripts/test-ui.sh`; empacotamento removido do CI geral para evitar duplicação.
+- Tags `vX.Y.Z` publicam GitHub Release com AppImage, checksum, fontes e informações do build; notas extraídas do CHANGELOG e tag conferida com a versão do workspace.
 - Licença alterada para GPL-3.0-only, com texto integral GPLv3, copyright, herança explícita nos seis crates e metadados AppStream. O pacote inclui LICENSE e COPYRIGHT; dependências preservam suas próprias licenças.
 
 ## 0.4.0 — 2026-10-21

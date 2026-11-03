@@ -22,9 +22,9 @@ Foi executado smoke do AppImage por extração no display Xvfb, com banco tempor
 
 ## GitHub Actions
 
-O workflow dedicado **AppImage**, em `.github/workflows/appimage.yml`, usa runner `ubuntu-24.04` x86_64. Ele instala as dependências de BUILD.md, confere os hashes das ferramentas, compila com Cargo.lock e executa smoke de CLI sem display e de GTK com Xvfb/D-Bus e banco temporário. As actions do workflow estão fixadas por commit. `contents: read` é suficiente; não requer PAT, secrets personalizados, FUSE nem permissões de escrita no repositório.
+O workflow dedicado **AppImage**, em `.github/workflows/appimage.yml`, usa runner `ubuntu-24.04` x86_64. Ele instala as dependências de BUILD.md, confere os hashes das ferramentas, compila com Cargo.lock e executa smoke de CLI sem display e de GTK com Xvfb/D-Bus e banco temporário. As actions do workflow estão fixadas por commit. O build usa `contents: read`; não requer PAT, secrets personalizados, FUSE nem permissões de escrita no repositório.
 
-Executa em todo push (incluindo tags), pull request e por **Actions → AppImage → Run workflow**. O botão manual depende de o arquivo estar no branch padrão do repositório. Depois da execução, baixe o artifact **CCTV-View-x86_64**, retido por 30 dias. A execução não cria nem publica GitHub Releases.
+Executa em todo push (incluindo tags), pull request e por **Actions → AppImage → Run workflow**. O botão manual depende de o arquivo estar no branch padrão do repositório. Depois da execução, baixe o artifact **CCTV-View-x86_64**, retido por 30 dias. Pushes de branch, PRs e execução manual só geram o artifact. Uma tag `vX.Y.Z` também executa o job **release**: confere que a tag coincide com a versão do workspace, extrai as notas da seção `## X.Y.Z` do CHANGELOG (`scripts/release-notes.sh`), revalida o `SHA256SUMS` e publica a GitHub Release com AppImage, checksum, fontes e BUILD-INFO. Somente esse job recebe `contents: write`, via `GITHUB_TOKEN`; o build continua com `contents: read`. Para publicar: atualizar versão e CHANGELOG, commitar e `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 O artifact contém:
 
